@@ -1,0 +1,78 @@
+html {
+  overflow: hidden;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  overflow: auto;
+}
+
+/* If I eliminate the first child, the cursor bar is not position correctly. */
+/* .alphaTabSurface > svg:first-child, */
+.alphaTabSurface > svg:last-child,
+.alphaTabSurface > svg:nth-child(2) > *:nth-child(1),
+.alphaTabSurface > svg:nth-child(2) > *:nth-child(2),
+.alphaTabSurface > svg:not(:first-child):not(:last-child) > *:nth-last-child(-n + 3),
+.alphaTabSurface > svg:not(:first-child):not(:last-child) > *:nth-last-child(5) {
+  display: none;
+}
+
+.beatCursor {
+  background: rgba(64, 64, 255, 0.75)
+}
+
+.atHighlight * {
+  fill: #0078ff;
+  stroke: #0078ff;
+}
+
+#controls {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  z-index: 1;
+}
+
+#blocklyEditor {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 40vw;
+}
+
+#toolbox {
+  display: none;
+}
+
+#right {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 60vw;
+}
+
+#wrapper {
+  overflow: auto;
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+
+#scratch {
+  display: none;
+}
+
+#foo {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 100;
+}

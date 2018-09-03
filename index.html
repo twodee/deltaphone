@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>...</title>
+  <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
+  <script src="alphaTab/Build/JavaScript/swfobject.js"></script>
+  <script src="alphaTab/Build/JavaScript/AlphaTab.js"></script>
+  <script src="blockly/blockly_compressed.js"></script>
+  <script src="blockly/blocks_compressed.js"></script>
+  <script src="blockly/msg/js/en.js"></script>
+  <script src="blocks.js"></script>
+  <script src="main.js"></script>
+  <link rel="stylesheet" type="text/css" href="style.css">
+</head>
+<body>
+
+<div id="blocklyEditor"></div>
+
+<textarea id="scratch"></textarea>
+
+<div id="right">
+  <div id="controls">
+    <input type="button" value="Render" id="renderButton">
+    <input type="button" value="Play" id="playButton">
+  </div>
+  <div id="wrapper">
+    <div id="score" data-player="general_user.sf2"></div>
+  </div>
+</div>
+
+<xml id="toolbox">
+  <category name="Notes">
+    <block type="note"><field name="duration">4</field></block>
+    <block type="notedelta"><field name="delta">0</field><field name="duration">4</field></block>
+    <block type="delta"><field name="delta">0</field></block>
+  </category>
+  <category name="Repeats">
+    <block type="repeat"></block>
+    <block type="repeat12"></block>
+  </category>
+  <category name="Numbers">
+    <block type="integer"></block>
+    <!-- <block type="real"></block> -->
+  </category>
+</xml>
+
+<textarea id="foo">
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE score-partwise PUBLIC
+ "-//Recordare//DTD MusicXML 3.0 Partwise//EN"
+ "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="3.0">
+ <part-list>
+ <score-part id="P1">
+ <part-name>Music</part-name>
+ </score-part>
+ </part-list>
+ <part id="P1">
+
+ <measure number="1">
+ <attributes>
+ <divisions>1</divisions>
+ <key>
+ <fifths>0</fifths>
+ </key>
+ <time>
+ <beats>4</beats>
+ <beat-type>4</beat-type>
+ </time>
+ <clef>
+ <sign>G</sign>
+ <line>2</line>
+ </clef>
+ </attributes>
+ <note>
+ <pitch>
+ <step>C</step>
+ <octave>5</octave>
+ </pitch>
+ <duration>4</duration>
+ <type>whole</type>
+ </note>
+  <barline location="right">
+    <bar-style>light-heavy</bar-style>
+    <ending type="stop" number="1"/>
+    <repeat direction="backward"/>
+  </barline>
+ </measure>
+
+ </part>
+</score-partwise>
+</textarea>
+
+</body>
+</html>

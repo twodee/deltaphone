@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   version="1.2"
+   width="3.782058mm"
+   height="8.4385471mm"
+   viewBox="0 0 2.1521999 4.8019993"
+   id="svg2"
+   inkscape:version="0.91 r13725"
+   sodipodi:docname="triple-croche tête en bas.svg">
+  <metadata
+     id="metadata130">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+        <cc:license
+           rdf:resource="https://creativecommons.org/publicdomain/mark/1.0/" />
+      </cc:Work>
+      <cc:License
+         rdf:about="https://creativecommons.org/publicdomain/mark/1.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+  <defs
+     id="defs128" />
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="1920"
+     inkscape:window-height="1018"
+     id="namedview126"
+     showgrid="false"
+     fit-margin-top="0"
+     fit-margin-left="0"
+     fit-margin-right="0"
+     fit-margin-bottom="0"
+     inkscape:zoom="0.63429568"
+     inkscape:cx="-557.9579"
+     inkscape:cy="-63.650458"
+     inkscape:window-x="-8"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg2" />
+  <!-- Page: 1/1 -->
+  <path
+     transform="matrix(0.004,0,0,-0.004,1.3161975,0.03999969)"
+     d="m 0,-213 0,-5 c 0,-111 86,-193 146,-284 3,11 4,23 4,35 0,93 -85,187 -150,254 z M 0,0 c 0,-175 193,-292 193,-467 0,-29 -7,-58 -19,-84 17,-35 29,-71 29,-111 0,-36 -9,-72 -24,-105 18,-35 30,-72 30,-113 0,-60 -16,-119 -42,-173 -5,-8 -12,-11 -19,-11 -13,0 -26,11 -23,27 26,49 42,102 42,157 0,91 -95,175 -167,233 l 0,-103 -16,0 0,750 16,0 z m 0,-430 0,-5 c 0,-112 89,-194 151,-285 6,19 9,38 9,58 0,90 -91,173 -160,232 z"
+     id="path52"
+     inkscape:connector-curvature="0"
+     style="fill:currentColor" />
+  <rect
+     transform="translate(1.2511975,2.7499997)"
+     x="-0.064999998"
+     y="-2.75"
+     width="0.13"
+     height="4.0622001"
+     ry="0.039999999"
+     id="rect54"
+     style="fill:currentColor" />
+  <a
+     id="a56"
+     transform="translate(-107.0786,-5.5953003)">
+    <path
+       transform="matrix(0.004,0,0,-0.004,107.0786,9.8453)"
+       d="m 220,138 c 56,0 109,-29 109,-91 0,-72 -56,-121 -103,-149 -36,-21 -76,-36 -117,-36 -56,0 -109,29 -109,91 0,72 56,121 103,149 36,21 76,36 117,36 z"
+       id="path58"
+       inkscape:connector-curvature="0"
+       style="fill:currentColor" />
+  </a>
+</svg>
