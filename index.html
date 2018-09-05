@@ -11,6 +11,7 @@
   <script src="blocks.js"></script>
   <script src="main.js"></script>
   <link rel="stylesheet" type="text/css" href="style.css">
+  <link href="https://fonts.googleapis.com/css?family=Hind" rel="stylesheet">
 </head>
 <body>
 
@@ -23,73 +24,93 @@
     <input type="button" value="Render" id="renderButton">
     <input type="button" value="Play" id="playButton">
   </div>
-  <div id="wrapper">
+  <div id="scoreWrapper">
     <div id="score" data-player="general_user.sf2"></div>
   </div>
 </div>
 
 <xml id="toolbox">
   <category name="Notes">
-    <block type="note"><field name="duration">4</field></block>
-    <block type="notedelta"><field name="delta">0</field><field name="duration">4</field></block>
-    <block type="delta"><field name="delta">0</field></block>
+    <block type="playAbsolute">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="octave">
+        <block type="integer">
+          <field name="value">4</field>
+        </block>
+      </value>
+      <value name="duration">
+        <block type="noteDuration">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
+    <block type="playRelative">
+      <value name="delta">
+        <block type="offset">
+          <field name="value">+1</field>
+        </block>
+      </value>
+      <value name="duration">
+        <block type="noteDuration">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
+    <block type="jump">
+      <value name="delta">
+        <block type="offset">
+          <field name="value">+1</field>
+        </block>
+      </value>
+    </block>
+    <block type="rest">
+      <value name="duration">
+        <block type="restDuration">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
   </category>
-  <category name="Repeats">
+  <category name="Loops">
     <block type="repeat"></block>
     <block type="repeat12"></block>
+    <block type="ditto">
+      <value name="count">
+        <block type="integer">
+          <field name="value">2</field>
+        </block>
+      </value>
+    </block>
   </category>
-  <category name="Numbers">
+  <category name="Values">
     <block type="integer"></block>
-    <!-- <block type="real"></block> -->
+    <block type="offset">
+      <field name="value">+1</field>
+    </block>
+    <block type="noteDuration">
+      <field name="value">4</field>
+    </block>
+    <block type="restDuration">
+      <field name="value">4</field>
+    </block>
+    <block type="accidental">
+      <field name="value">0</field>
+    </block>
+    <block type="letter">
+      <field name="value">0</field>
+    </block>
+    <block type="random"></block>
   </category>
 </xml>
-
-<textarea id="foo">
-<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE score-partwise PUBLIC
- "-//Recordare//DTD MusicXML 3.0 Partwise//EN"
- "http://www.musicxml.org/dtds/partwise.dtd">
-<score-partwise version="3.0">
- <part-list>
- <score-part id="P1">
- <part-name>Music</part-name>
- </score-part>
- </part-list>
- <part id="P1">
-
- <measure number="1">
- <attributes>
- <divisions>1</divisions>
- <key>
- <fifths>0</fifths>
- </key>
- <time>
- <beats>4</beats>
- <beat-type>4</beat-type>
- </time>
- <clef>
- <sign>G</sign>
- <line>2</line>
- </clef>
- </attributes>
- <note>
- <pitch>
- <step>C</step>
- <octave>5</octave>
- </pitch>
- <duration>4</duration>
- <type>whole</type>
- </note>
-  <barline location="right">
-    <bar-style>light-heavy</bar-style>
-    <ending type="stop" number="1"/>
-    <repeat direction="backward"/>
-  </barline>
- </measure>
-
- </part>
-</score-partwise>
-</textarea>
 
 </body>
 </html>
