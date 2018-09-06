@@ -583,11 +583,24 @@ function setup() {
     }
   };
   workspace = Blockly.inject('blocklyEditor', options);
+  
+  // Blockly recently added support for custom context menus. See
+  // https://github.com/google/blockly/pull/1710 for details.
+  workspace.configureContextMenu = (options) => {
+    var option = {
+      enabled: true,
+      text: 'Copy',
+      callback: copyWorkspace,
+    };
+    options.push(option);
 
-  // $('#generateButton').click(function() {
-    // var code = Blockly.Deltaphone.workspaceToCode(workspace);
-    // console.log(code);
-  // });
+    var option = {
+      enabled: true,
+      text: 'Paste',
+      callback: pasteWorkspace,
+    };
+    options.push(option);
+  };
 
   $('#playButton').click(() => {
     $('#score').alphaTab('playPause');
@@ -596,7 +609,7 @@ function setup() {
   $('#renderButton').click(() => {
     var xml = Blockly.Xml.workspaceToDom(workspace);
     xml = Blockly.Xml.domToText(xml);
-    console.log("xml:", xml);
+    // console.log("xml:", xml);
     localStorage.setItem('last', xml);
 
     var roots = workspace.getTopBlocks();
@@ -636,16 +649,58 @@ function setup() {
     }
   });
 
-  var importer = new alphaTab.importer.MusicXmlImporter();
-  console.log("importer:", importer);
+  // var importer = new alphaTab.importer.MusicXmlImporter();
+  // console.log("importer:", importer);
 }
 
 $(document).ready(setup);
 
 function render() {
   var musicXML = $('#scratch').val();
-  console.log("musicXML:", musicXML);
+  // console.log("musicXML:", musicXML);
   musicXML = new TextEncoder().encode(musicXML);
   $('#score').alphaTab('load', musicXML);
   // $('#score').alphaTab('load', 'foo.xml');
+}
+
+function workspaceToXml() {
+  var xml = Blockly.Xml.workspaceToDom(workspace);
+  return Blockly.Xml.domToPrettyText(xml);
+}
+
+function copyWorkspace() {
+  // var staging = document.createElement('textarea');
+  // staging.value = workspaceToXml();
+  // document.body.appendChild(staging);
+  // staging.focus();
+  // staging.select();
+  // try {
+    // var isSuccessful = document.execCommand('copy');
+    // console.log("isSuccessful:", isSuccessful);
+  // } catch (error) {
+    // console.log("error:", error);
+  // }
+  // document.body.removeChild(staging);
+  
+  // The clipboard API is new. See https://developers.google.com/web/updates/2018/03/clipboardapi.
+  var xml = workspaceToXml();
+  navigator.clipboard.writeText(xml)
+    .then(() => {
+      console.log("Copied.");
+    })
+    .catch(error => {
+      console.log("error:", error);
+    });
+}
+
+function pasteWorkspace() {
+  navigator.clipboard.readText()
+    .then(xml => {
+      console.log("xml:", xml);
+      var dom = Blockly.Xml.textToDom(xml);
+      Blockly.Xml.domToWorkspace(dom, workspace);
+    })
+    .catch(error => {
+      console.log("error:", error);
+    });
 }
