@@ -106,7 +106,10 @@ function ExpressionReal(value) {
 }
 
 function emitNote(env, duration) {
-  if (env.beats == 4) {
+  if (!env.hasFirstMeasure) {
+    initialMeasure(env);
+  }
+  if (env.beats == env.beatsPerMeasure) {
     breakMeasure(env);
     env.beats = 0;
   }
@@ -156,13 +159,23 @@ function durationToName(duration) {
 function StatementRest(duration) {
   this.duration = duration;
   this.evaluate = function(env) {
-    if (env.beats == 4) {
+    if (env.beats == env.beatsPerMeasure) {
       breakMeasure(env);
       env.beats = 0;
     }
     var d = duration.evaluate(env);
     env.beats += 4 / d;
     env.xml += '<note><rest measure="yes"/><duration>' + d + '</duration></note>\n';
+  }
+}
+
+function StatementTimeSignature(beatsPerMeasure, beatNote) {
+  this.beatsPerMeasure = beatsPerMeasure;
+  this.beatNote = beatNote;
+  this.evaluate = function(env) {
+    console.log("this.beatsPerMeasure:", this.beatsPerMeasure);
+    env.beatsPerMeasure = beatsPerMeasure;
+    env.beatNote = beatNote;
   }
 }
 
@@ -196,21 +209,7 @@ function StatementProgram(block) {
     env.xml += '    </score-part>\n';
     env.xml += '  </part-list>\n';
     env.xml += '  <part id="P1">\n';
-    env.xml += '    <measure number="1">\n';
-    env.xml += '      <attributes>\n';
-    env.xml += '        <divisions>8</divisions>\n';
-    env.xml += '        <key>\n';
-    env.xml += '          <fifths>0</fifths>\n';
-    env.xml += '        </key>\n';
-    env.xml += '        <time>\n';
-    env.xml += '          <beats>4</beats>\n';
-    env.xml += '          <beat-type>4</beat-type>\n';
-    env.xml += '        </time>\n';
-    env.xml += '        <clef>\n';
-    env.xml += '          <sign>G</sign>\n';
-    env.xml += '          <line>2</line>\n';
-    env.xml += '        </clef>\n';
-    env.xml += '      </attributes>\n';
+    env.hasFirstMeasure = false;
     this.block.evaluate(env);
     env.xml += '    </measure>\n';
     env.xml += '  </part>\n';
@@ -219,11 +218,30 @@ function StatementProgram(block) {
   }
 }
 
+function initialMeasure(env) {
+  env.hasFirstMeasure = true;
+  env.xml += '    <measure number="1">\n';
+  env.xml += '      <attributes>\n';
+  env.xml += '        <divisions>8</divisions>\n';
+  env.xml += '        <key>\n';
+  env.xml += '          <fifths>0</fifths>\n';
+  env.xml += '        </key>\n';
+  env.xml += '        <time>\n';
+  env.xml += '          <beats>' + env.beatsPerMeasure + '</beats>\n';
+  env.xml += '          <beat-type>' + env.beatNote + '</beat-type>\n';
+  env.xml += '        </time>\n';
+  env.xml += '        <clef>\n';
+  env.xml += '          <sign>G</sign>\n';
+  env.xml += '          <line>2</line>\n';
+  env.xml += '        </clef>\n';
+  env.xml += '      </attributes>\n';
+}
+
 function StatementRepeat(block) {
   this.block = block;
   this.evaluate = function(env) {
     console.log("env.beats:", env.beats);
-    if (env.beats == 4) {
+    if (env.beats == env.beatsPerMeasure) {
       breakMeasure(env);
       env.beats = 0;
     }
@@ -255,7 +273,7 @@ function StatementRepeat12(common, first, second) {
   this.first = first;
   this.second = second;
   this.evaluate = function(env) {
-    if (env.beats == 4) {
+    if (env.beats == env.beatsPerMeasure) {
       breakMeasure(env);
       env.beats = 0;
     }
@@ -424,6 +442,37 @@ var blockDefinitions = {
   },
 
   // Commands
+  timeSignature: {
+    configuration: {
+      colour: statementColor,
+      nextStatement: null,
+      inputsInline: true,
+      message0: "time signature %1",
+      args0: [
+        {
+          type: 'field_dropdown',
+          name: 'signature',
+          options: [
+            ['4/4', '4/4'],
+            ['3/4', '3/4'],
+          ],
+        },
+      ]
+    },
+    tree: function(block) {
+      var beatsPerMeasure;
+      var beatNote;
+      var signature = this.getFieldValue('signature');
+      if (signature == '4/4') {
+        beatNote = 4;
+        beatsPerMeasure = 4;
+      } else if (signature == '3/4') {
+        beatsPerMeasure = 3;
+        beatNote = 4;
+      }
+      return new StatementTimeSignature(beatsPerMeasure, beatNote);
+    }
+  },
   playAbsolute: {
     configuration: {
       colour: statementColor,
@@ -606,30 +655,7 @@ function setup() {
     $('#score').alphaTab('playPause');
   });
 
-  $('#renderButton').click(() => {
-    var xml = Blockly.Xml.workspaceToDom(workspace);
-    xml = Blockly.Xml.domToText(xml);
-    // console.log("xml:", xml);
-    localStorage.setItem('last', xml);
-
-    var roots = workspace.getTopBlocks();
-    var statements = [];
-    roots.forEach(root => {
-      while (root) {
-        statements.push(root.tree());
-        root = root.getNextBlock();
-      }
-    });
-    var program = new StatementProgram(new StatementBlock(statements));
-
-    var env = {
-      iMeasure: 2,
-      beats: 0,
-      halfstep: 48,
-    };
-    program.evaluate(env);
-    render();
-  });
+  $('#renderButton').click(interpret);
 
   var last = localStorage.getItem('last');
   if (last) {
@@ -651,9 +677,45 @@ function setup() {
 
   // var importer = new alphaTab.importer.MusicXmlImporter();
   // console.log("importer:", importer);
+  //
+  workspace.addChangeListener(event => {
+    // if (event.type == Blockly.Events.BLOCK_CHANGE ||
+        // event.type == Blockly.Events.BLOCK_DELETE ||
+        // event.type == Blockly.Events.BLOCK_CREATE) {
+      // console.log("reinterpret");
+      interpret();
+    // }
+  });
 }
 
 $(document).ready(setup);
+
+function interpret() {
+  var xml = Blockly.Xml.workspaceToDom(workspace);
+  xml = Blockly.Xml.domToText(xml);
+  // console.log("xml:", xml);
+  localStorage.setItem('last', xml);
+
+  var roots = workspace.getTopBlocks();
+  var statements = [];
+  roots.forEach(root => {
+    while (root) {
+      statements.push(root.tree());
+      root = root.getNextBlock();
+    }
+  });
+  var program = new StatementProgram(new StatementBlock(statements));
+
+  var env = {
+    iMeasure: 2,
+    beats: 0,
+    halfstep: 48,
+    beatsPerMeasure: 4,
+    beatNote: 4,
+  };
+  program.evaluate(env);
+  render();
+}
 
 function render() {
   var musicXML = $('#scratch').val();
