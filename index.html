@@ -31,7 +31,25 @@
 
 <xml id="toolbox">
   <category name="Notes">
+    <block type="keySignature">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="scale">
+        <block type="scale">
+          <field name="value">major</field>
+        </block>
+      </value>
+    </block>
     <block type="timeSignature"></block>
+    <block type="deltaMode"></block>
     <block type="playAbsolute">
       <value name="letter">
         <block type="letter">
@@ -62,6 +80,23 @@
       </value>
       <value name="duration">
         <block type="noteDuration">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
+    <block type="jumpAbsolute">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="octave">
+        <block type="integer">
           <field name="value">4</field>
         </block>
       </value>
@@ -107,6 +142,9 @@
       <field name="value">0</field>
     </block>
     <block type="letter">
+      <field name="value">0</field>
+    </block>
+    <block type="scale">
       <field name="value">0</field>
     </block>
     <block type="random"></block>

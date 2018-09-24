@@ -35,6 +35,11 @@ var accidentals = [
   ['\u266d', '-1'],
 ];
 
+var scales = [
+  ['major', 'major'],
+  ['minor', 'minor'],
+];
+
 var noteDurations = [
   [{"src": "images/note1.svg", "width": 13, "height": 5, "alt": "Whole"}, "1"],
   [{"src": "images/note2.svg", "width": 9, "height": 20, "alt": "Half"}, "2"],
@@ -82,6 +87,13 @@ var deltas = [
 ];
 
 function ExpressionInteger(value) {
+  this.value = value;
+  this.evaluate = function(env) {
+    return this.value;
+  }
+}
+
+function ExpressionScale(value) {
   this.value = value;
   this.evaluate = function(env) {
     return this.value;
@@ -173,9 +185,18 @@ function StatementTimeSignature(beatsPerMeasure, beatNote) {
   this.beatsPerMeasure = beatsPerMeasure;
   this.beatNote = beatNote;
   this.evaluate = function(env) {
-    console.log("this.beatsPerMeasure:", this.beatsPerMeasure);
     env.beatsPerMeasure = beatsPerMeasure;
     env.beatNote = beatNote;
+  }
+}
+
+function StatementKeySignature(letter, accidental, scale) {
+  this.letter = letter;
+  this.accidental = accidental;
+  this.scale = scale;
+  this.evaluate = function(env) {
+    env.root = this.letter.evaluate(env) + this.accidental.evaluate(env);
+    env.scale = this.scale.evaluate(env);
   }
 }
 
@@ -187,6 +208,22 @@ function StatementPlayAbsolute(letter, accidental, octave, duration) {
   this.evaluate = function(env) {
     env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
     emitNote(env, this.duration.evaluate(env));
+  }
+}
+
+function StatementDeltaAbsolute(letter, accidental, octave) {
+  this.letter = letter;
+  this.accidental = accidental;
+  this.octave = octave;
+  this.evaluate = function(env) {
+    env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
+  }
+}
+
+function StatementDeltaMode(mode) {
+  this.mode = mode;
+  this.evaluate = function(env) {
+    env.deltaMode = this.mode;
   }
 }
 
@@ -297,10 +334,35 @@ function StatementRepeat12(common, first, second) {
   }
 }
 
+function deltaAt(env, delta) {
+  var jump;
+  if (env.deltaMode == 'scale') {
+    var majorScaleUp = [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1];
+    var majorScaleDown = [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2];
+    var base = (env.halfstep - env.root + 12) % 12;
+    jump = 0;
+    if (delta > 0) {
+      for (var i = 0; i < delta; ++i) {
+        jump += majorScaleUp[base];
+        base = (base + majorScaleUp[base]) % 12;
+      }
+    } else if (delta < 0) {
+      for (var i = 0; i < -delta; ++i) {
+        jump += majorScaleDown[base];
+        base = (base + majorScaleDown[base] + 12) % 12;
+      }
+    }
+  } else {
+    jump = delta;
+  }
+  return jump;
+}
+
 function StatementDelta(delta) {
   this.delta = delta;
   this.evaluate = function(env) {
-    env.halfstep += this.delta.evaluate(env);
+    var rawDelta = this.delta.evaluate(env);
+    env.halfstep += deltaAt(env, rawDelta);
   }
 }
 
@@ -308,7 +370,8 @@ function StatementPlayRelative(delta, duration) {
   this.delta = delta;
   this.duration = duration;
   this.evaluate = function(env) {
-    env.halfstep += this.delta.evaluate(env);
+    var rawDelta = this.delta.evaluate(env);
+    env.halfstep += deltaAt(env, rawDelta);
     emitNote(env, this.duration.evaluate(env));
   }
 }
@@ -411,6 +474,19 @@ var blockDefinitions = {
       return new ExpressionInteger(parseInt(this.getFieldValue('value')));
     }
   },
+  scale: {
+    configuration: {
+      colour: expressionColor,
+      output: "Scale",
+      message0: "%1",
+      args0: [
+        { type: "field_dropdown", name: "value", options: scales },
+      ]
+    },
+    tree: function() {
+      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
+    }
+  },
   real: {
     configuration: {
       colour: expressionColor,
@@ -473,6 +549,26 @@ var blockDefinitions = {
       return new StatementTimeSignature(beatsPerMeasure, beatNote);
     }
   },
+  keySignature: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: "key signature %1 %2 %3",
+      args0: [
+        { type: "input_value", align: "RIGHT", name: "letter" },
+        { type: "input_value", align: "RIGHT", name: "accidental" },
+        { type: "input_value", align: "RIGHT", name: "scale" },
+      ]
+    },
+    tree: function(block) {
+      var letter = this.getInputTargetBlock('letter').tree();
+      var accidental = this.getInputTargetBlock('accidental').tree();
+      var scale = this.getInputTargetBlock('scale').tree();
+      return new StatementKeySignature(letter, accidental, scale);
+    }
+  },
   playAbsolute: {
     configuration: {
       colour: statementColor,
@@ -493,6 +589,26 @@ var blockDefinitions = {
       var octave = this.getInputTargetBlock('octave').tree();
       var duration = this.getInputTargetBlock('duration').tree();
       return new StatementPlayAbsolute(letter, accidental, octave, duration);
+    }
+  },
+  jumpAbsolute: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: "jump %1 %2 %3",
+      args0: [
+        { type: "input_value", align: "RIGHT", name: "letter" },
+        { type: "input_value", align: "RIGHT", name: "accidental" },
+        { type: "input_value", align: "RIGHT", name: "octave" },
+      ]
+    },
+    tree: function() {
+      var letter = this.getInputTargetBlock('letter').tree();
+      var accidental = this.getInputTargetBlock('accidental').tree();
+      var octave = this.getInputTargetBlock('octave').tree();
+      return new StatementDeltaAbsolute(letter, accidental, octave);
     }
   },
   jump: {
@@ -543,6 +659,29 @@ var blockDefinitions = {
     tree: function() {
       var duration = this.getInputTargetBlock('duration').tree();
       return new StatementRest(duration);
+    }
+  },
+  deltaMode: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: "jump by %1",
+      args0: [
+        {
+          type: "field_dropdown",
+          name: "mode",
+          options: [
+            ['scale position', 'scale'],
+            ['halfsteps', 'halfsteps'],
+          ]
+        },
+      ]
+    },
+    tree: function() {
+      var mode = this.getFieldValue('mode');
+      return new StatementDeltaMode(mode);
     }
   },
 
@@ -707,6 +846,9 @@ function interpret() {
   var program = new StatementProgram(new StatementBlock(statements));
 
   var env = {
+    deltaMode: 'scale',
+    root: 0,
+    scale: 'major',
     iMeasure: 2,
     beats: 0,
     halfstep: 48,
