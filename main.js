@@ -121,11 +121,13 @@ function emitNote(env, duration) {
   if (!env.hasFirstMeasure) {
     initialMeasure(env);
   }
-  if (env.beats == env.beatsPerMeasure) {
-    breakMeasure(env);
-    env.beats = 0;
+  if (!env.isChord) {
+    if (env.beats == env.beatsPerMeasure) {
+      breakMeasure(env);
+      env.beats = 0;
+    }
+    env.beats += 4 / duration;
   }
-  env.beats += 4 / duration;
   var alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
   var alpha = alphas[env.halfstep % 12];
   var octave = Math.floor(env.halfstep / 12);
@@ -147,7 +149,8 @@ function emitNote(env, duration) {
   // 32 -> 1  | 2 ^ 5 -> 2 ^ 0
   // x' = 2 ^ (5 - log2(x))
   // var divisions = 1 << (5 - Math.log2(duration));
-  env.xml += '<note><pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(duration) + '</type></note>\n';
+  var chord = env.isChord ? '<chord/>' : '';
+  env.xml += '<note>' + chord + '<pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(duration) + '</type></note>\n';
 }
 
 function durationToName(duration) {
@@ -231,6 +234,26 @@ function StatementBlock(statements) {
   this.statements = statements;
   this.evaluate = function(env) {
     statements.forEach(statement => statement.evaluate(env));
+  }
+}
+
+function StatementChord(statements) {
+  this.statements = statements;
+  this.evaluate = function(env) {
+    if (env.isChord) {
+      throw 'Already chording!';
+    }
+
+    if (this.statements.length > 0) {
+      this.statements[0].evaluate(env);
+      var oldHalfstep = env.halfstep;
+      env.isChord = true;
+      for (var i = 1; i < this.statements.length; ++i) {
+        this.statements[i].evaluate(env);
+      }
+      env.halfstep = oldHalfstep;
+      env.isChord = false;
+    }
   }
 }
 
@@ -376,13 +399,17 @@ function StatementPlayRelative(delta, duration) {
   }
 }
 
-function slurpBlock(block) {
+function slurpStatements(block) {
   var statements = [];
   while (block) {
     statements.push(block.tree());
     block = block.getNextBlock();
   }
-  return new StatementBlock(statements);
+  return statements;
+}
+
+function slurpBlock(block) {
+  return new StatementBlock(slurpStatements());
 }
 
 function breakMeasure(env) {
@@ -701,6 +728,21 @@ var blockDefinitions = {
       return new StatementRepeat(slurpBlock(bodyBlock));
     }
   },
+  chord: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: "chord %1",
+      args0: [
+        { "type": "input_statement", "align": "RIGHT", "name": "body" },
+      ]
+    },
+    tree: function(block) {
+      var bodyBlock = this.getInputTargetBlock('body');
+      return new StatementChord(slurpStatements(bodyBlock));
+    }
+  },
   repeat12: {
     configuration: {
       colour: statementColor,
@@ -861,7 +903,7 @@ function interpret() {
 
 function render() {
   var musicXML = $('#scratch').val();
-  // console.log("musicXML:", musicXML);
+  console.log("musicXML:", musicXML);
   musicXML = new TextEncoder().encode(musicXML);
   $('#score').alphaTab('load', musicXML);
   // $('#score').alphaTab('load', 'foo.xml');
