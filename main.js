@@ -58,6 +58,11 @@ var restDurations = [
   [{"src": "images/rest32.svg", "width": 12, "height": 25, "alt": "Thirty-second"}, "32"],
 ];
 
+var deltaUnits = [
+  ['halfsteps', 'halfsteps'],
+  ['keysteps', 'keysteps'],
+];
+
 var deltas = [
   ["+12", "+12"],
   ["+11", "+11"],
@@ -71,7 +76,7 @@ var deltas = [
   ["+3", "+3"],
   ["+2", "+2"],
   ["+1", "+1"],
-  ["0", "0"],
+  ["+0", "+0"],
   ["-1", "-1"],
   ["-2", "-2"],
   ["-3", "-3"],
@@ -90,6 +95,45 @@ function ExpressionInteger(value) {
   this.value = value;
   this.evaluate = function(env) {
     return this.value;
+  }
+}
+
+function ExpressionPosition(letter, accidental, octave) {
+  this.letter = letter;
+  this.accidental = accidental;
+  this.octave = octave;
+  this.evaluate = function(env) {
+    env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
+    return env.halfstep;
+  }
+}
+
+function ExpressionOffset(value, isHalfsteps) {
+  this.value = value;
+  this.isHalfsteps = isHalfsteps;
+  this.evaluate = function(env) {
+    var jump;
+    if (this.isHalfsteps) {
+      jump = value;
+    } else {
+      var majorScaleUp = [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1];
+      var majorScaleDown = [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2];
+      var base = (env.halfstep - env.root + 12) % 12;
+      jump = 0;
+      if (value > 0) {
+        for (var i = 0; i < value; ++i) {
+          jump += majorScaleUp[base];
+          base = (base + majorScaleUp[base]) % 12;
+        }
+      } else if (value < 0) {
+        for (var i = 0; i < -value; ++i) {
+          jump += majorScaleDown[base];
+          base = (base + majorScaleDown[base] + 12) % 12;
+        }
+      }
+    }
+    env.halfstep += jump;
+    return env.halfstep;
   }
 }
 
@@ -117,20 +161,22 @@ function ExpressionReal(value) {
   }
 }
 
-function emitNote(env, duration) {
-  if (!env.hasFirstMeasure) {
-    initialMeasure(env);
-  }
-  if (!env.isChord) {
-    if (env.beats == env.beatsPerMeasure) {
-      breakMeasure(env);
-      env.beats = 0;
+function ExpressionChord(notes) {
+  this.notes = notes;
+  this.evaluate = function(env) {
+    var ids = this.notes.map(note => note.evaluate(env));
+    if (ids.length > 0) {
+      env.halfstep = ids[0];
     }
-    env.beats += 4 / duration;
+    return ids;
   }
+}
+
+function emitNote(env, id, duration, isChord) {
+  console.log("id:", id);
   var alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-  var alpha = alphas[env.halfstep % 12];
-  var octave = Math.floor(env.halfstep / 12);
+  var alpha = alphas[id % 12];
+  var octave = Math.floor(id / 12);
   var alter;
   if (alpha.length > 1) {
     if (alpha[1] == '#') {
@@ -149,8 +195,31 @@ function emitNote(env, duration) {
   // 32 -> 1  | 2 ^ 5 -> 2 ^ 0
   // x' = 2 ^ (5 - log2(x))
   // var divisions = 1 << (5 - Math.log2(duration));
-  var chord = env.isChord ? '<chord/>' : '';
+  var chord = isChord ? '<chord/>' : '';
   env.xml += '<note>' + chord + '<pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(duration) + '</type></note>\n';
+}
+
+function emitNotes(env, ids, duration) {
+  if (!env.hasFirstMeasure) {
+    initialMeasure(env);
+  }
+  if (env.beats == env.beatsPerMeasure) {
+    breakMeasure(env);
+    env.beats = 0;
+  }
+  env.beats += 4 / duration;
+  // 1 -> 32  | 2 ^ 0 -> 2 ^ 5
+  // 2 -> 16  | 2 ^ 1 -> 2 ^ 4
+  // 4 -> 8   | 2 ^ 2 -> 2 ^ 3
+  // 8 -> 4   | 2 ^ 3 -> 2 ^ 2
+  // 16 -> 2  | 2 ^ 4 -> 2 ^ 1
+  // 32 -> 1  | 2 ^ 5 -> 2 ^ 0
+  // x' = 2 ^ (5 - log2(x))
+  // var divisions = 1 << (5 - Math.log2(duration));
+  emitNote(env, ids[0], duration, false);
+  for (var i = 1; i < ids.length; ++i) {
+    emitNote(env, ids[i], duration, true);
+  }
 }
 
 function durationToName(duration) {
@@ -184,6 +253,12 @@ function StatementRest(duration) {
   }
 }
 
+function StatementReroot() {
+  this.evaluate = function(env) {
+    env.root = env.halfstep % 12;
+  }
+}
+
 function StatementTimeSignature(beatsPerMeasure, beatNote) {
   this.beatsPerMeasure = beatsPerMeasure;
   this.beatNote = beatNote;
@@ -203,57 +278,10 @@ function StatementKeySignature(letter, accidental, scale) {
   }
 }
 
-function StatementPlayAbsolute(letter, accidental, octave, duration) {
-  this.letter = letter;
-  this.accidental = accidental;
-  this.octave = octave;
-  this.duration = duration;
-  this.evaluate = function(env) {
-    env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
-    emitNote(env, this.duration.evaluate(env));
-  }
-}
-
-function StatementDeltaAbsolute(letter, accidental, octave) {
-  this.letter = letter;
-  this.accidental = accidental;
-  this.octave = octave;
-  this.evaluate = function(env) {
-    env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
-  }
-}
-
-function StatementDeltaMode(mode) {
-  this.mode = mode;
-  this.evaluate = function(env) {
-    env.deltaMode = this.mode;
-  }
-}
-
 function StatementBlock(statements) {
   this.statements = statements;
   this.evaluate = function(env) {
     statements.forEach(statement => statement.evaluate(env));
-  }
-}
-
-function StatementChord(statements) {
-  this.statements = statements;
-  this.evaluate = function(env) {
-    if (env.isChord) {
-      throw 'Already chording!';
-    }
-
-    if (this.statements.length > 0) {
-      this.statements[0].evaluate(env);
-      var oldHalfstep = env.halfstep;
-      env.isChord = true;
-      for (var i = 1; i < this.statements.length; ++i) {
-        this.statements[i].evaluate(env);
-      }
-      env.halfstep = oldHalfstep;
-      env.isChord = false;
-    }
   }
 }
 
@@ -322,7 +350,10 @@ function StatementX(count, block) {
   this.block = block;
   this.evaluate = function(env) {
     var n = this.count.evaluate(env);
+    console.log("n:", n);
     for (var i = 0; i < n; ++i) {
+      console.log("i:", i);
+      console.log("this.block:", this.block);
       this.block.evaluate(env);
     }
   }
@@ -358,44 +389,26 @@ function StatementRepeat12(common, first, second) {
 }
 
 function deltaAt(env, delta) {
-  var jump;
-  if (env.deltaMode == 'scale') {
-    var majorScaleUp = [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1];
-    var majorScaleDown = [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2];
-    var base = (env.halfstep - env.root + 12) % 12;
-    jump = 0;
-    if (delta > 0) {
-      for (var i = 0; i < delta; ++i) {
-        jump += majorScaleUp[base];
-        base = (base + majorScaleUp[base]) % 12;
-      }
-    } else if (delta < 0) {
-      for (var i = 0; i < -delta; ++i) {
-        jump += majorScaleDown[base];
-        base = (base + majorScaleDown[base] + 12) % 12;
-      }
-    }
-  } else {
-    jump = delta;
-  }
-  return jump;
 }
 
-function StatementDelta(delta) {
-  this.delta = delta;
+function StatementJump(note) {
+  this.note = note;
   this.evaluate = function(env) {
-    var rawDelta = this.delta.evaluate(env);
-    env.halfstep += deltaAt(env, rawDelta);
+    console.log("this.note:", this.note);
+    this.note.evaluate(env);
   }
 }
 
-function StatementPlayRelative(delta, duration) {
-  this.delta = delta;
+function StatementPlay(note, duration) {
+  this.note = note;
   this.duration = duration;
   this.evaluate = function(env) {
-    var rawDelta = this.delta.evaluate(env);
-    env.halfstep += deltaAt(env, rawDelta);
-    emitNote(env, this.duration.evaluate(env));
+    var ids = this.note.evaluate(env);
+    if (!Array.isArray(ids)) {
+      ids = [ids];
+    }
+    console.log("ids:", ids);
+    emitNotes(env, ids, this.duration.evaluate(env));
   }
 }
 
@@ -409,7 +422,7 @@ function slurpStatements(block) {
 }
 
 function slurpBlock(block) {
-  return new StatementBlock(slurpStatements());
+  return new StatementBlock(slurpStatements(block));
 }
 
 function breakMeasure(env) {
@@ -436,17 +449,37 @@ var blockDefinitions = {
       return new ExpressionInteger(parseInt(this.getFieldValue('value')));
     }
   },
+  position: {
+    configuration: {
+      colour: expressionColor,
+      output: "Position",
+      inputsInline: true,
+      message0: "%1 %2 %3",
+      args0: [
+        { type: "input_value", align: "RIGHT", name: "letter" },
+        { type: "input_value", align: "RIGHT", name: "accidental" },
+        { type: "input_value", align: "RIGHT", name: "octave" },
+      ]
+    },
+    tree: function() {
+      var letter = this.getInputTargetBlock('letter').tree();
+      var accidental = this.getInputTargetBlock('accidental').tree();
+      var octave = this.getInputTargetBlock('octave').tree();
+      return new ExpressionPosition(letter, accidental, octave);
+    }
+  },
   offset: {
     configuration: {
       colour: expressionColor,
       output: "Offset",
-      message0: "%1",
+      message0: "%1 %2",
       args0: [
         { type: "field_dropdown", name: "value", options: deltas },
+        { type: "field_dropdown", name: "unit", options: deltaUnits },
       ]
     },
     tree: function() {
-      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
+      return new ExpressionOffset(parseInt(this.getFieldValue('value')), this.getFieldValue('unit') == 'halfsteps');
     }
   },
   noteDuration: {
@@ -562,7 +595,7 @@ var blockDefinitions = {
         },
       ]
     },
-    tree: function(block) {
+    tree: function() {
       var beatsPerMeasure;
       var beatNote;
       var signature = this.getFieldValue('signature');
@@ -589,53 +622,11 @@ var blockDefinitions = {
         { type: "input_value", align: "RIGHT", name: "scale" },
       ]
     },
-    tree: function(block) {
+    tree: function() {
       var letter = this.getInputTargetBlock('letter').tree();
       var accidental = this.getInputTargetBlock('accidental').tree();
       var scale = this.getInputTargetBlock('scale').tree();
       return new StatementKeySignature(letter, accidental, scale);
-    }
-  },
-  playAbsolute: {
-    configuration: {
-      colour: statementColor,
-      previousStatement: null,
-      nextStatement: null,
-      inputsInline: true,
-      message0: "play %1 %2 %3 %4",
-      args0: [
-        { type: "input_value", align: "RIGHT", name: "letter" },
-        { type: "input_value", align: "RIGHT", name: "accidental" },
-        { type: "input_value", align: "RIGHT", name: "octave" },
-        { type: "input_value", align: "RIGHT", name: "duration" },
-      ]
-    },
-    tree: function(block) {
-      var letter = this.getInputTargetBlock('letter').tree();
-      var accidental = this.getInputTargetBlock('accidental').tree();
-      var octave = this.getInputTargetBlock('octave').tree();
-      var duration = this.getInputTargetBlock('duration').tree();
-      return new StatementPlayAbsolute(letter, accidental, octave, duration);
-    }
-  },
-  jumpAbsolute: {
-    configuration: {
-      colour: statementColor,
-      previousStatement: null,
-      nextStatement: null,
-      inputsInline: true,
-      message0: "jump %1 %2 %3",
-      args0: [
-        { type: "input_value", align: "RIGHT", name: "letter" },
-        { type: "input_value", align: "RIGHT", name: "accidental" },
-        { type: "input_value", align: "RIGHT", name: "octave" },
-      ]
-    },
-    tree: function() {
-      var letter = this.getInputTargetBlock('letter').tree();
-      var accidental = this.getInputTargetBlock('accidental').tree();
-      var octave = this.getInputTargetBlock('octave').tree();
-      return new StatementDeltaAbsolute(letter, accidental, octave);
     }
   },
   jump: {
@@ -646,15 +637,15 @@ var blockDefinitions = {
       inputsInline: true,
       message0: "jump %1",
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "delta" },
+        { "type": "input_value", "align": "RIGHT", "name": "note" },
       ]
     },
     tree: function() {
-      var delta = this.getInputTargetBlock('delta').tree();
-      return new StatementDelta(delta);
+      var note = this.getInputTargetBlock('note').tree();
+      return new StatementJump(note);
     }
   },
-  playRelative: {
+  play: {
     configuration: {
       colour: statementColor,
       previousStatement: null,
@@ -662,14 +653,14 @@ var blockDefinitions = {
       inputsInline: true,
       message0: "play %1 %2",
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "delta" },
+        { "type": "input_value", "align": "RIGHT", "name": "note" },
         { "type": "input_value", "align": "RIGHT", "name": "duration" },
       ]
     },
     tree: function() {
-      var delta = this.getInputTargetBlock('delta').tree();
+      var note = this.getInputTargetBlock('note').tree();
       var duration = this.getInputTargetBlock('duration').tree();
-      return new StatementPlayRelative(delta, duration);
+      return new StatementPlay(note, duration);
     }
   },
   rest: {
@@ -688,29 +679,6 @@ var blockDefinitions = {
       return new StatementRest(duration);
     }
   },
-  deltaMode: {
-    configuration: {
-      colour: statementColor,
-      previousStatement: null,
-      nextStatement: null,
-      inputsInline: true,
-      message0: "jump by %1",
-      args0: [
-        {
-          type: "field_dropdown",
-          name: "mode",
-          options: [
-            ['scale position', 'scale'],
-            ['halfsteps', 'halfsteps'],
-          ]
-        },
-      ]
-    },
-    tree: function() {
-      var mode = this.getFieldValue('mode');
-      return new StatementDeltaMode(mode);
-    }
-  },
 
   // Control
   repeat: {
@@ -723,24 +691,35 @@ var blockDefinitions = {
         { "type": "input_statement", "align": "RIGHT", "name": "body" },
       ]
     },
-    tree: function(block) {
+    tree: function() {
       var bodyBlock = this.getInputTargetBlock('body');
       return new StatementRepeat(slurpBlock(bodyBlock));
     }
   },
   chord: {
     configuration: {
-      colour: statementColor,
-      previousStatement: null,
-      nextStatement: null,
-      message0: "chord %1",
+      colour: expressionColor,
+      output: "Chord",
+      message0: "chord %1 %2 %3",
       args0: [
-        { "type": "input_statement", "align": "RIGHT", "name": "body" },
-      ]
+        { "type": "input_value", "align": "RIGHT", "name": "element0", "check": "Offset" },
+        { "type": "input_value", "align": "RIGHT", "name": "element1", "check": "Offset" },
+        { "type": "input_value", "align": "RIGHT", "name": "element2", "check": "Offset" },
+      ],
+      mutator: 'setArity',
+      extensions: ['addArityMenuItem'],
     },
-    tree: function(block) {
-      var bodyBlock = this.getInputTargetBlock('body');
-      return new StatementChord(slurpStatements(bodyBlock));
+    deltaphone: {
+      arity: 3,
+      elementType: 'Offset',
+    },
+    tree: function() {
+      var deltas = [];
+      for (var i = 0; i < this.deltaphone.arity; ++i) {
+        var element = this.getInputTargetBlock('element' + i);
+        deltas.push(element.tree());
+      }
+      return new ExpressionChord(deltas);
     }
   },
   repeat12: {
@@ -755,11 +734,22 @@ var blockDefinitions = {
         { "type": "input_statement", "align": "RIGHT", "name": "second" },
       ]
     },
-    tree: function(block) {
+    tree: function() {
       var commonBlock = slurpBlock(this.getInputTargetBlock('common'));
       var firstBlock = slurpBlock(this.getInputTargetBlock('first'));
       var secondBlock = slurpBlock(this.getInputTargetBlock('second'));
       return new StatementRepeat12(commonBlock, firstBlock, secondBlock);
+    }
+  },
+  reroot: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: "reroot",
+    },
+    tree: function() {
+      return new StatementReroot();
     }
   },
   ditto: {
@@ -774,7 +764,7 @@ var blockDefinitions = {
         { "type": "input_statement", "align": "RIGHT", "name": "body" },
       ]
     },
-    tree: function(block) {
+    tree: function() {
       var countBlock = this.getInputTargetBlock('count');
       var bodyBlock = this.getInputTargetBlock('body');
       return new StatementX(countBlock.tree(), slurpBlock(bodyBlock));
@@ -786,9 +776,24 @@ function initializeBlock(id) {
   Blockly.Blocks[id] = {
     init: function() {
       this.jsonInit(blockDefinitions[id].configuration);
+      if (blockDefinitions[id].hasOwnProperty('deltaphone')) {
+        console.log("hhhhhhhhhhhhhhhhhhh");
+        this.deltaphone = Object.assign({}, blockDefinitions[id].deltaphone);
+        console.log("this:", this);
+      }
     },
     tree: blockDefinitions[id].tree
   };
+}
+
+function triggerArity(block, arity) {
+  console.log("arity:", arity);
+  var oldMutation = block.mutationToDom();
+  block.deltaphone.arity = arity;
+  var newMutation = block.mutationToDom();
+  block.domToMutation(newMutation);
+  var event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
+  Blockly.Events.fire(event);
 }
 
 function setup() {
@@ -798,6 +803,65 @@ function setup() {
       initializeBlock(id);
     }
   }
+
+  Blockly.Extensions.register('addArityMenuItem', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        var option = {
+          enabled: true,
+          text: 'Change number...',
+          callback: function() {
+            var size = prompt("How many notes are in the chord?");
+            if (new RegExp(/^\d+/).test(size)) {
+              triggerArity(block, parseInt(size));
+            }
+          }
+        };
+        options.push(option);
+      }
+    });
+  });
+
+  Blockly.Extensions.registerMutator('setArity', {
+    mutationToDom: function() {
+      var container = document.createElement('mutation');
+      container.setAttribute('arity', this.deltaphone.arity);
+      return container;
+    },
+    domToMutation: function(xml) {
+      var expectedArity = xml.getAttribute('arity');
+      var actualArity = this.getInput('empty') ? 0 : this.inputList.length;
+      this.deltaphone.arity = expectedArity;
+
+      if (expectedArity > 0 && actualArity == 0) {
+        this.removeInput('empty');
+      } else if (expectedArity == 0 && actualArity > 0) {
+        this.appendDummyInput('empty')
+            .appendField(this.type);
+      }
+
+      // Currently there are more than we need. Trim off extras.
+      if (actualArity > expectedArity) {
+        for (var i = actualArity - 1; i >= expectedArity; --i) {
+          this.removeInput('element' + i);
+        }
+      }
+      
+      // Currently there are fewer than we need. Add missing.
+      else if (actualArity < expectedArity) {
+        for (var i = actualArity; i < expectedArity; ++i) {
+          var input = this.appendValueInput('element' + i, );
+          if (i == 0) {
+            input.appendField(this.type);
+          }
+          if (this.deltaphone.elementType) {
+            input.setCheck(this.deltaphone.elementType);
+          }
+        }
+      }
+    }
+  });
 
   var options = {
     toolbox: document.getElementById('toolbox'),
@@ -888,7 +952,7 @@ function interpret() {
   var program = new StatementProgram(new StatementBlock(statements));
 
   var env = {
-    deltaMode: 'scale',
+    isChord: false,
     root: 0,
     scale: 'major',
     iMeasure: 2,

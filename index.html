@@ -21,7 +21,6 @@
 
 <div id="right">
   <div id="controls">
-    <input type="button" value="Render" id="renderButton">
     <input type="button" value="Play" id="playButton">
   </div>
   <div id="scoreWrapper">
@@ -49,54 +48,11 @@
       </value>
     </block>
     <block type="timeSignature"></block>
-    <block type="deltaMode"></block>
-    <block type="playAbsolute">
-      <value name="letter">
-        <block type="letter">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="accidental">
-        <block type="accidental">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="octave">
-        <block type="integer">
-          <field name="value">4</field>
-        </block>
+    <block type="play">
+      <value name="note">
       </value>
       <value name="duration">
         <block type="noteDuration">
-          <field name="value">4</field>
-        </block>
-      </value>
-    </block>
-    <block type="playRelative">
-      <value name="delta">
-        <block type="offset">
-          <field name="value">+1</field>
-        </block>
-      </value>
-      <value name="duration">
-        <block type="noteDuration">
-          <field name="value">4</field>
-        </block>
-      </value>
-    </block>
-    <block type="jumpAbsolute">
-      <value name="letter">
-        <block type="letter">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="accidental">
-        <block type="accidental">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="octave">
-        <block type="integer">
           <field name="value">4</field>
         </block>
       </value>
@@ -115,7 +71,28 @@
         </block>
       </value>
     </block>
+    <block type="offset">
+      <field name="value">+1</field>
+    </block>
+    <block type="position">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="octave">
+        <block type="integer">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
     <block type="chord"></block>
+    <block type="reroot"></block>
   </category>
   <category name="Loops">
     <block type="repeat"></block>
@@ -130,9 +107,6 @@
   </category>
   <category name="Values">
     <block type="integer"></block>
-    <block type="offset">
-      <field name="value">+1</field>
-    </block>
     <block type="noteDuration">
       <field name="value">4</field>
     </block>
