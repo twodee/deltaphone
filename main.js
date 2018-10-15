@@ -108,10 +108,11 @@ function ExpressionPosition(letter, accidental, octave) {
   }
 }
 
-function ExpressionOffset(value, isHalfsteps) {
-  this.value = value;
+function ExpressionOffset(offset, isHalfsteps) {
+  this.offset = offset;
   this.isHalfsteps = isHalfsteps;
   this.evaluate = function(env) {
+    var value = offset.evaluate(env);
     var jump;
     if (this.isHalfsteps) {
       jump = value;
@@ -479,7 +480,21 @@ var blockDefinitions = {
       ]
     },
     tree: function() {
-      return new ExpressionOffset(parseInt(this.getFieldValue('value')), this.getFieldValue('unit') == 'halfsteps');
+      return new ExpressionOffset(new ExpressionInteger(parseInt(this.getFieldValue('value'))), this.getFieldValue('unit') == 'halfsteps');
+    }
+  },
+  offsetWithInput: {
+    configuration: {
+      colour: expressionColor,
+      output: "Offset",
+      message0: "%1 %2",
+      args0: [
+        { type: "input_value", name: "offset", check: ['Integer'] },
+        { type: "field_dropdown", name: "unit", options: deltaUnits },
+      ]
+    },
+    tree: function() {
+      return new ExpressionOffset(this.getInputTargetBlock('offset').tree(), this.getFieldValue('unit') == 'halfsteps');
     }
   },
   noteDuration: {
