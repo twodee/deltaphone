@@ -41,54 +41,54 @@ var scales = [
 ];
 
 var noteDurations = [
-  [{"src": "images/note1.svg", "width": 13, "height": 5, "alt": "Whole"}, "1"],
-  [{"src": "images/note2.svg", "width": 9, "height": 20, "alt": "Half"}, "2"],
-  [{"src": "images/note4.svg", "width": 9, "height": 20, "alt": "Quarter"}, "4"],
-  [{"src": "images/note8.svg", "width": 14, "height": 20, "alt": "Eighth"}, "8"],
-  [{"src": "images/note16.svg", "width": 14, "height": 20, "alt": "Sixteenth"}, "16"],
-  [{"src": "images/note32.svg", "width": 14, "height": 24, "alt": "Thirty-second"}, "32"],
+  [{'src': 'images/note1.svg', 'width': 13, 'height': 5, 'alt': 'Whole'}, '1'],
+  [{'src': 'images/note2.svg', 'width': 9, 'height': 20, 'alt': 'Half'}, '2'],
+  [{'src': 'images/note4.svg', 'width': 9, 'height': 20, 'alt': 'Quarter'}, '4'],
+  [{'src': 'images/note8.svg', 'width': 14, 'height': 20, 'alt': 'Eighth'}, '8'],
+  [{'src': 'images/note16.svg', 'width': 14, 'height': 20, 'alt': 'Sixteenth'}, '16'],
+  [{'src': 'images/note32.svg', 'width': 14, 'height': 24, 'alt': 'Thirty-second'}, '32'],
 ];
 
 var restDurations = [
-  [{"src": "images/rest1.svg", "width": 15, "height": 12, "alt": "Whole"}, "1"],
-  [{"src": "images/rest2.svg", "width": 15, "height": 12, "alt": "Half"}, "2"],
-  [{"src": "images/rest4.svg", "width": 8, "height": 20, "alt": "Quarter"}, "4"],
-  [{"src": "images/rest8.svg", "width": 8, "height": 16, "alt": "Eighth"}, "8"],
-  [{"src": "images/rest16.svg", "width": 10, "height": 20, "alt": "Sixteenth"}, "16"],
-  [{"src": "images/rest32.svg", "width": 12, "height": 25, "alt": "Thirty-second"}, "32"],
+  [{'src': 'images/rest1.svg', 'width': 15, 'height': 12, 'alt': 'Whole'}, '1'],
+  [{'src': 'images/rest2.svg', 'width': 15, 'height': 12, 'alt': 'Half'}, '2'],
+  [{'src': 'images/rest4.svg', 'width': 8, 'height': 20, 'alt': 'Quarter'}, '4'],
+  [{'src': 'images/rest8.svg', 'width': 8, 'height': 16, 'alt': 'Eighth'}, '8'],
+  [{'src': 'images/rest16.svg', 'width': 10, 'height': 20, 'alt': 'Sixteenth'}, '16'],
+  [{'src': 'images/rest32.svg', 'width': 12, 'height': 25, 'alt': 'Thirty-second'}, '32'],
 ];
 
 var deltaUnits = [
-  ['halfsteps', 'halfsteps'],
-  ['keysteps', 'keysteps'],
+  ['keysteps', '0'],
+  ['halfsteps', '1'],
 ];
 
 var deltas = [
-  ["+12", "+12"],
-  ["+11", "+11"],
-  ["+10", "+10"],
-  ["+9", "+9"],
-  ["+8", "+8"],
-  ["+7", "+7"],
-  ["+6", "+6"],
-  ["+5", "+5"],
-  ["+4", "+4"],
-  ["+3", "+3"],
-  ["+2", "+2"],
-  ["+1", "+1"],
-  ["+0", "+0"],
-  ["-1", "-1"],
-  ["-2", "-2"],
-  ["-3", "-3"],
-  ["-4", "-4"],
-  ["-5", "-5"],
-  ["-6", "-6"],
-  ["-7", "-7"],
-  ["-8", "-8"],
-  ["-9", "-9"],
-  ["-10", "-10"],
-  ["-11", "-11"],
-  ["-12", "-12"],
+  ['+12', '+12'],
+  ['+11', '+11'],
+  ['+10', '+10'],
+  ['+9', '+9'],
+  ['+8', '+8'],
+  ['+7', '+7'],
+  ['+6', '+6'],
+  ['+5', '+5'],
+  ['+4', '+4'],
+  ['+3', '+3'],
+  ['+2', '+2'],
+  ['+1', '+1'],
+  ['+0', '+0'],
+  ['-1', '-1'],
+  ['-2', '-2'],
+  ['-3', '-3'],
+  ['-4', '-4'],
+  ['-5', '-5'],
+  ['-6', '-6'],
+  ['-7', '-7'],
+  ['-8', '-8'],
+  ['-9', '-9'],
+  ['-10', '-10'],
+  ['-11', '-11'],
+  ['-12', '-12'],
 ];
 
 function ExpressionInteger(value) {
@@ -104,6 +104,36 @@ function ExpressionPosition(letter, accidental, octave) {
   this.octave = octave;
   this.evaluate = function(env) {
     env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
+    return env.halfstep;
+  }
+}
+
+function ExpressionDelta(deltaValue, deltaUnit) {
+  this.deltaValue = deltaValue;
+  this.deltaUnit = deltaUnit;
+  this.evaluate = function(env) {
+    var value = this.deltaValue.evaluate(env);
+    var jump;
+    if (this.deltaUnit.value == 1) {
+      jump = value;
+    } else {
+      var majorScaleUp = [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1];
+      var majorScaleDown = [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2];
+      var base = (env.halfstep - env.root + 12) % 12;
+      jump = 0;
+      if (value > 0) {
+        for (var i = 0; i < value; ++i) {
+          jump += majorScaleUp[base];
+          base = (base + majorScaleUp[base]) % 12;
+        }
+      } else if (value < 0) {
+        for (var i = 0; i < -value; ++i) {
+          jump += majorScaleDown[base];
+          base = (base + majorScaleDown[base] + 12) % 12;
+        }
+      }
+    }
+    env.halfstep += jump;
     return env.halfstep;
   }
 }
@@ -174,7 +204,6 @@ function ExpressionChord(notes) {
 }
 
 function emitNote(env, id, duration, isChord) {
-  console.log("id:", id);
   var alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
   var alpha = alphas[id % 12];
   var octave = Math.floor(id / 12);
@@ -329,7 +358,6 @@ function initialMeasure(env) {
 function StatementRepeat(block) {
   this.block = block;
   this.evaluate = function(env) {
-    console.log("env.beats:", env.beats);
     if (env.beats == env.beatsPerMeasure) {
       breakMeasure(env);
       env.beats = 0;
@@ -351,10 +379,7 @@ function StatementX(count, block) {
   this.block = block;
   this.evaluate = function(env) {
     var n = this.count.evaluate(env);
-    console.log("n:", n);
     for (var i = 0; i < n; ++i) {
-      console.log("i:", i);
-      console.log("this.block:", this.block);
       this.block.evaluate(env);
     }
   }
@@ -395,8 +420,53 @@ function deltaAt(env, delta) {
 function StatementJump(note) {
   this.note = note;
   this.evaluate = function(env) {
-    console.log("this.note:", this.note);
     this.note.evaluate(env);
+  }
+}
+
+function StatementPlayRelative(deltaValue, deltaUnit, duration) {
+  this.deltaValue = deltaValue;
+  this.deltaUnit = deltaUnit;
+  this.duration = duration;
+  this.evaluate = function(env) {
+    var ids = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env);
+    if (!Array.isArray(ids)) {
+      ids = [ids];
+    }
+    emitNotes(env, ids, this.duration.evaluate(env));
+  }
+}
+
+function StatementPlayAbsolute(letter, accidental, octave, duration) {
+  this.letter = letter;
+  this.accidental = accidental;
+  this.octave = octave;
+  this.duration = duration;
+  this.evaluate = function(env) {
+    var ids = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env);
+    if (!Array.isArray(ids)) {
+      ids = [ids];
+    }
+    emitNotes(env, ids, this.duration.evaluate(env));
+  }
+}
+
+function StatementJumpRelative(deltaValue, deltaUnit) {
+  this.deltaValue = deltaValue;
+  this.deltaUnit = deltaUnit;
+  this.evaluate = function(env) {
+    var id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env);
+    env.halfstep = id;
+  }
+}
+
+function StatementJumpAbsolute(letter, accidental, octave) {
+  this.letter = letter;
+  this.accidental = accidental;
+  this.octave = octave;
+  this.evaluate = function(env) {
+    var id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env);
+    env.halfstep = id;
   }
 }
 
@@ -408,7 +478,6 @@ function StatementPlay(note, duration) {
     if (!Array.isArray(ids)) {
       ids = [ids];
     }
-    console.log("ids:", ids);
     emitNotes(env, ids, this.duration.evaluate(env));
   }
 }
@@ -440,26 +509,42 @@ var blockDefinitions = {
   integer: {
     configuration: {
       colour: expressionColor,
-      output: "Integer",
-      message0: "%1",
+      output: 'Integer',
+      message0: '%1',
       args0: [
-        { type: "field_input", name: "value", text: "0" },
+        { type: 'field_input', name: 'value', text: '0' },
       ]
     },
     tree: function() {
       return new ExpressionInteger(parseInt(this.getFieldValue('value')));
     }
   },
+  delta: {
+    configuration: {
+      colour: expressionColor,
+      output: 'Delta',
+      inputsInline: true,
+      message0: 'delta %1 %2',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'value' },
+        { type: 'input_value', align: 'RIGHT', name: 'unit' },
+      ]
+    },
+    tree: function() {
+      return new ExpressionDelta(this.getInputTargetBlock('value').tree(),
+                                 this.getInputTargetBlock('unit').tree());
+    }
+  },
   position: {
     configuration: {
       colour: expressionColor,
-      output: "Position",
+      output: 'Position',
       inputsInline: true,
-      message0: "%1 %2 %3",
+      message0: 'note %1 %2 %3',
       args0: [
-        { type: "input_value", align: "RIGHT", name: "letter" },
-        { type: "input_value", align: "RIGHT", name: "accidental" },
-        { type: "input_value", align: "RIGHT", name: "octave" },
+        { type: 'input_value', align: 'RIGHT', name: 'letter' },
+        { type: 'input_value', align: 'RIGHT', name: 'accidental' },
+        { type: 'input_value', align: 'RIGHT', name: 'octave' },
       ]
     },
     tree: function() {
@@ -469,41 +554,39 @@ var blockDefinitions = {
       return new ExpressionPosition(letter, accidental, octave);
     }
   },
-  offset: {
+  deltaValue: {
     configuration: {
       colour: expressionColor,
-      output: "Offset",
-      message0: "%1 %2",
+      output: 'Integer',
+      message0: '%1',
       args0: [
-        { type: "field_dropdown", name: "value", options: deltas },
-        { type: "field_dropdown", name: "unit", options: deltaUnits },
+        { type: 'field_dropdown', name: 'value', options: deltas },
       ]
     },
     tree: function() {
-      return new ExpressionOffset(new ExpressionInteger(parseInt(this.getFieldValue('value'))), this.getFieldValue('unit') == 'halfsteps');
+      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
     }
   },
-  offsetWithInput: {
+  deltaUnit: {
     configuration: {
       colour: expressionColor,
-      output: "Offset",
-      message0: "%1 %2",
+      output: 'DeltaUnit',
+      message0: '%1',
       args0: [
-        { type: "input_value", name: "offset", check: ['Integer'] },
-        { type: "field_dropdown", name: "unit", options: deltaUnits },
+        { type: 'field_dropdown', name: 'unit', options: deltaUnits },
       ]
     },
     tree: function() {
-      return new ExpressionOffset(this.getInputTargetBlock('offset').tree(), this.getFieldValue('unit') == 'halfsteps');
+      return new ExpressionInteger(parseInt(this.getFieldValue('unit')));
     }
   },
   noteDuration: {
     configuration: {
       colour: expressionColor,
-      output: "NoteDuration",
-      message0: "%1",
+      output: 'NoteDuration',
+      message0: '%1',
       args0: [
-        { type: "field_dropdown", name: "value", options: noteDurations },
+        { type: 'field_dropdown', name: 'value', options: noteDurations },
       ]
     },
     tree: function() {
@@ -513,10 +596,10 @@ var blockDefinitions = {
   restDuration: {
     configuration: {
       colour: expressionColor,
-      output: "RestDuration",
-      message0: "%1",
+      output: 'RestDuration',
+      message0: '%1',
       args0: [
-        { type: "field_dropdown", name: "value", options: restDurations },
+        { type: 'field_dropdown', name: 'value', options: restDurations },
       ]
     },
     tree: function() {
@@ -526,10 +609,10 @@ var blockDefinitions = {
   accidental: {
     configuration: {
       colour: expressionColor,
-      output: "Accidental",
-      message0: "%1",
+      output: 'Accidental',
+      message0: '%1',
       args0: [
-        { type: "field_dropdown", name: "value", options: accidentals },
+        { type: 'field_dropdown', name: 'value', options: accidentals },
       ]
     },
     tree: function() {
@@ -539,10 +622,10 @@ var blockDefinitions = {
   letter: {
     configuration: {
       colour: expressionColor,
-      output: "Letter",
-      message0: "%1",
+      output: 'Letter',
+      message0: '%1',
       args0: [
-        { type: "field_dropdown", name: "value", options: letters },
+        { type: 'field_dropdown', name: 'value', options: letters },
       ]
     },
     tree: function() {
@@ -552,10 +635,10 @@ var blockDefinitions = {
   scale: {
     configuration: {
       colour: expressionColor,
-      output: "Scale",
-      message0: "%1",
+      output: 'Scale',
+      message0: '%1',
       args0: [
-        { type: "field_dropdown", name: "value", options: scales },
+        { type: 'field_dropdown', name: 'value', options: scales },
       ]
     },
     tree: function() {
@@ -565,10 +648,10 @@ var blockDefinitions = {
   real: {
     configuration: {
       colour: expressionColor,
-      output: "Real",
-      message0: "%1",
+      output: 'Real',
+      message0: '%1',
       args0: [
-        { type: "field_input", name: "value", text: "0.0" },
+        { type: 'field_input', name: 'value', text: '0.0' },
       ]
     },
     tree: function() {
@@ -578,11 +661,11 @@ var blockDefinitions = {
   random: {
     configuration: {
       colour: expressionColor,
-      output: "Integer",
-      message0: "random min %1 max %2",
+      output: 'Integer',
+      message0: 'random min %1 max %2',
       args0: [
-        { type: "input_value", align: "RIGHT", name: "min" },
-        { type: "input_value", align: "RIGHT", name: "max" },
+        { type: 'input_value', align: 'RIGHT', name: 'min' },
+        { type: 'input_value', align: 'RIGHT', name: 'max' },
       ]
     },
     tree: function() {
@@ -598,7 +681,7 @@ var blockDefinitions = {
       colour: statementColor,
       nextStatement: null,
       inputsInline: true,
-      message0: "time signature %1",
+      message0: 'time signature %1',
       args0: [
         {
           type: 'field_dropdown',
@@ -630,11 +713,11 @@ var blockDefinitions = {
       previousStatement: null,
       nextStatement: null,
       inputsInline: true,
-      message0: "key signature %1 %2 %3",
+      message0: 'key signature %1 %2 %3',
       args0: [
-        { type: "input_value", align: "RIGHT", name: "letter" },
-        { type: "input_value", align: "RIGHT", name: "accidental" },
-        { type: "input_value", align: "RIGHT", name: "scale" },
+        { type: 'input_value', align: 'RIGHT', name: 'letter' },
+        { type: 'input_value', align: 'RIGHT', name: 'accidental' },
+        { type: 'input_value', align: 'RIGHT', name: 'scale' },
       ]
     },
     tree: function() {
@@ -650,9 +733,9 @@ var blockDefinitions = {
       previousStatement: null,
       nextStatement: null,
       inputsInline: true,
-      message0: "jump %1",
+      message0: 'jump %1',
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "note" },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'note' },
       ]
     },
     tree: function() {
@@ -666,10 +749,10 @@ var blockDefinitions = {
       previousStatement: null,
       nextStatement: null,
       inputsInline: true,
-      message0: "play %1 %2",
+      message0: 'play %1 %2',
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "note" },
-        { "type": "input_value", "align": "RIGHT", "name": "duration" },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'note' },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'duration' },
       ]
     },
     tree: function() {
@@ -678,15 +761,91 @@ var blockDefinitions = {
       return new StatementPlay(note, duration);
     }
   },
+  jumpAbsolute: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'jump %1 %2 %3',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'letter', check: ['Letter']},
+        { type: 'input_value', align: 'RIGHT', name: 'accidental', check: ['Accidental']},
+        { type: 'input_value', align: 'RIGHT', name: 'octave', check: ['Integer']},
+      ]
+    },
+    tree: function() {
+      return new StatementJumpAbsolute(this.getInputTargetBlock('letter').tree(),
+                                       this.getInputTargetBlock('accidental').tree(),
+                                       this.getInputTargetBlock('octave').tree());
+    }
+  },
+  jumpRelative: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'jump %1 %2',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'deltaValue', check: ['DeltaValue', 'Integer']},
+        { type: 'input_value', align: 'RIGHT', name: 'deltaUnit', check: ['DeltaUnit']},
+      ]
+    },
+    tree: function() {
+      return new StatementJumpRelative(this.getInputTargetBlock('deltaValue').tree(),
+                                       this.getInputTargetBlock('deltaUnit').tree());
+    }
+  },
+  playAbsolute: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'play %1 %2 %3 %4',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'letter', check: ['Letter']},
+        { type: 'input_value', align: 'RIGHT', name: 'accidental', check: ['Accidental']},
+        { type: 'input_value', align: 'RIGHT', name: 'octave', check: ['Integer']},
+        { type: 'input_value', align: 'RIGHT', name: 'duration' },
+      ]
+    },
+    tree: function() {
+      return new StatementPlayAbsolute(this.getInputTargetBlock('letter').tree(),
+                                       this.getInputTargetBlock('accidental').tree(),
+                                       this.getInputTargetBlock('octave').tree(),
+                                       this.getInputTargetBlock('duration').tree());
+    }
+  },
+  playRelative: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'play %1 %2 %3',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'deltaValue', check: ['DeltaValue', 'Integer']},
+        { type: 'input_value', align: 'RIGHT', name: 'deltaUnit', check: ['DeltaUnit']},
+        { type: 'input_value', align: 'RIGHT', name: 'duration' },
+      ]
+    },
+    tree: function() {
+      return new StatementPlayRelative(this.getInputTargetBlock('deltaValue').tree(),
+                                       this.getInputTargetBlock('deltaUnit').tree(),
+                                       this.getInputTargetBlock('duration').tree());
+    }
+  },
   rest: {
     configuration: {
       colour: statementColor,
       previousStatement: null,
       nextStatement: null,
       inputsInline: true,
-      message0: "rest %1",
+      message0: 'rest %1',
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "duration" },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'duration' },
       ]
     },
     tree: function() {
@@ -701,9 +860,9 @@ var blockDefinitions = {
       colour: statementColor,
       previousStatement: null,
       nextStatement: null,
-      message0: "repeat %1",
+      message0: 'repeat %1',
       args0: [
-        { "type": "input_statement", "align": "RIGHT", "name": "body" },
+        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'body' },
       ]
     },
     tree: function() {
@@ -714,12 +873,12 @@ var blockDefinitions = {
   chord: {
     configuration: {
       colour: expressionColor,
-      output: "Chord",
-      message0: "chord %1 %2 %3",
+      output: 'Chord',
+      message0: 'chord %1 %2 %3',
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "element0", "check": "Offset" },
-        { "type": "input_value", "align": "RIGHT", "name": "element1", "check": "Offset" },
-        { "type": "input_value", "align": "RIGHT", "name": "element2", "check": "Offset" },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element0', 'check': ['Delta', 'Offset'] },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element1', 'check': ['Delta', 'Offset'] },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element2', 'check': ['Delta', 'Offset'] },
       ],
       mutator: 'setArity',
       extensions: ['addArityMenuItem'],
@@ -742,11 +901,11 @@ var blockDefinitions = {
       colour: statementColor,
       previousStatement: null,
       nextStatement: null,
-      message0: "repeat %1 1. %2 2. %3",
+      message0: 'repeat %1 1. %2 2. %3',
       args0: [
-        { "type": "input_statement", "align": "LEFT", "name": "common" },
-        { "type": "input_statement", "align": "RIGHT", "name": "first" },
-        { "type": "input_statement", "align": "RIGHT", "name": "second" },
+        { 'type': 'input_statement', 'align': 'LEFT', 'name': 'common' },
+        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'first' },
+        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'second' },
       ]
     },
     tree: function() {
@@ -761,7 +920,7 @@ var blockDefinitions = {
       colour: statementColor,
       previousStatement: null,
       nextStatement: null,
-      message0: "reroot",
+      message0: 'reroot',
     },
     tree: function() {
       return new StatementReroot();
@@ -773,10 +932,10 @@ var blockDefinitions = {
       previousStatement: null,
       nextStatement: null,
       inputsInline: true,
-      message0: "ditto %1 %2",
+      message0: 'ditto %1 %2',
       args0: [
-        { "type": "input_value", "align": "RIGHT", "name": "count" },
-        { "type": "input_statement", "align": "RIGHT", "name": "body" },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'count' },
+        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'body' },
       ]
     },
     tree: function() {
@@ -792,9 +951,7 @@ function initializeBlock(id) {
     init: function() {
       this.jsonInit(blockDefinitions[id].configuration);
       if (blockDefinitions[id].hasOwnProperty('deltaphone')) {
-        console.log("hhhhhhhhhhhhhhhhhhh");
         this.deltaphone = Object.assign({}, blockDefinitions[id].deltaphone);
-        console.log("this:", this);
       }
     },
     tree: blockDefinitions[id].tree
@@ -802,7 +959,6 @@ function initializeBlock(id) {
 }
 
 function triggerArity(block, arity) {
-  console.log("arity:", arity);
   var oldMutation = block.mutationToDom();
   block.deltaphone.arity = arity;
   var newMutation = block.mutationToDom();
@@ -827,7 +983,7 @@ function setup() {
           enabled: true,
           text: 'Change number...',
           callback: function() {
-            var size = prompt("How many notes are in the chord?");
+            var size = prompt('How many notes are in the chord?');
             if (new RegExp(/^\d+/).test(size)) {
               triggerArity(block, parseInt(size));
             }
@@ -936,13 +1092,13 @@ function setup() {
   });
 
   // var importer = new alphaTab.importer.MusicXmlImporter();
-  // console.log("importer:", importer);
+  // console.log('importer:', importer);
   //
   workspace.addChangeListener(event => {
     // if (event.type == Blockly.Events.BLOCK_CHANGE ||
         // event.type == Blockly.Events.BLOCK_DELETE ||
         // event.type == Blockly.Events.BLOCK_CREATE) {
-      // console.log("reinterpret");
+      // console.log('reinterpret');
       interpret();
     // }
   });
@@ -953,7 +1109,7 @@ $(document).ready(setup);
 function interpret() {
   var xml = Blockly.Xml.workspaceToDom(workspace);
   xml = Blockly.Xml.domToText(xml);
-  // console.log("xml:", xml);
+  // console.log('xml:', xml);
   localStorage.setItem('last', xml);
 
   var roots = workspace.getTopBlocks();
@@ -982,7 +1138,6 @@ function interpret() {
 
 function render() {
   var musicXML = $('#scratch').val();
-  console.log("musicXML:", musicXML);
   musicXML = new TextEncoder().encode(musicXML);
   $('#score').alphaTab('load', musicXML);
   // $('#score').alphaTab('load', 'foo.xml');
@@ -1001,9 +1156,9 @@ function copyWorkspace() {
   // staging.select();
   // try {
     // var isSuccessful = document.execCommand('copy');
-    // console.log("isSuccessful:", isSuccessful);
+    // console.log('isSuccessful:', isSuccessful);
   // } catch (error) {
-    // console.log("error:", error);
+    // console.log('error:', error);
   // }
   // document.body.removeChild(staging);
   
@@ -1011,21 +1166,21 @@ function copyWorkspace() {
   var xml = workspaceToXml();
   navigator.clipboard.writeText(xml)
     .then(() => {
-      console.log("Copied.");
+      console.log('Copied.');
     })
     .catch(error => {
-      console.log("error:", error);
+      console.log('error:', error);
     });
 }
 
 function pasteWorkspace() {
   navigator.clipboard.readText()
     .then(xml => {
-      console.log("xml:", xml);
+      console.log('xml:', xml);
       var dom = Blockly.Xml.textToDom(xml);
       Blockly.Xml.domToWorkspace(dom, workspace);
     })
     .catch(error => {
-      console.log("error:", error);
+      console.log('error:', error);
     });
 }

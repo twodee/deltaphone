@@ -29,7 +29,7 @@
 </div>
 
 <xml id="toolbox">
-  <category name="Notes">
+  <category name="Core">
     <block type="keySignature">
       <value name="letter">
         <block type="letter">
@@ -48,8 +48,16 @@
       </value>
     </block>
     <block type="timeSignature"></block>
-    <block type="play">
-      <value name="note">
+    <block type="playRelative">
+      <value name="deltaValue">
+        <block type="deltaValue">
+          <field name="value">+1</field>
+        </block>
+      </value>
+      <value name="deltaUnit">
+        <block type="deltaUnit">
+          <field name="unit">keysteps</field>
+        </block>
       </value>
       <value name="duration">
         <block type="noteDuration">
@@ -57,26 +65,41 @@
         </block>
       </value>
     </block>
-    <block type="jump">
-      <value name="delta">
-        <block type="offset">
-          <field name="value">+1</field>
+    <block type="playAbsolute">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
         </block>
       </value>
-    </block>
-    <block type="rest">
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="octave">
+        <block type="integer">
+          <field name="value">4</field>
+        </block>
+      </value>
       <value name="duration">
-        <block type="restDuration">
+        <block type="noteDuration">
           <field name="value">4</field>
         </block>
       </value>
     </block>
-    <block type="offset">
-      <field name="value">+1</field>
+    <block type="jumpRelative">
+      <value name="deltaValue">
+        <block type="deltaValue">
+          <field name="value">+1</field>
+        </block>
+      </value>
+      <value name="deltaUnit">
+        <block type="deltaUnit">
+          <field name="unit">keysteps</field>
+        </block>
+      </value>
     </block>
-    <block type="offsetWithInput">
-    </block>
-    <block type="position">
+    <block type="jumpAbsolute">
       <value name="letter">
         <block type="letter">
           <field name="value">0</field>
@@ -93,8 +116,13 @@
         </block>
       </value>
     </block>
-    <block type="chord"></block>
-    <block type="reroot"></block>
+    <block type="rest">
+      <value name="duration">
+        <block type="restDuration">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
   </category>
   <category name="Loops">
     <block type="repeat"></block>
@@ -122,9 +150,64 @@
       <field name="value">0</field>
     </block>
     <block type="scale">
-      <field name="value">0</field>
+      <field name="value">major</field>
+    </block>
+    <block type="deltaValue">
+      <field name="value">+1</field>
+    </block>
+    <block type="deltaUnit">
+      <field name="unit">keysteps</field>
     </block>
     <block type="random"></block>
+  </category>
+  <category name="Pro">
+    <block type="play">
+      <value name="note">
+      </value>
+      <value name="duration">
+        <block type="noteDuration">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
+    <block type="jump">
+      <value name="delta">
+        <block type="offset">
+          <field name="value">+1</field>
+        </block>
+      </value>
+    </block>
+    <block type="position">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="octave">
+        <block type="integer">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
+    <block type="delta">
+      <value name="value">
+        <block type="deltaValue">
+          <field name="value">+1</field>
+        </block>
+      </value>
+      <value name="unit">
+        <block type="deltaUnit">
+          <field name="unit">keysteps</field>
+        </block>
+      </value>
+    </block>
+    <block type="chord"></block>
+    <block type="reroot"></block>
   </category>
 </xml>
 
