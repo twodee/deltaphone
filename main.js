@@ -138,36 +138,6 @@ function ExpressionDelta(deltaValue, deltaUnit) {
   }
 }
 
-function ExpressionOffset(offset, isHalfsteps) {
-  this.offset = offset;
-  this.isHalfsteps = isHalfsteps;
-  this.evaluate = function(env) {
-    var value = offset.evaluate(env);
-    var jump;
-    if (this.isHalfsteps) {
-      jump = value;
-    } else {
-      var majorScaleUp = [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1];
-      var majorScaleDown = [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2];
-      var base = (env.halfstep - env.root + 12) % 12;
-      jump = 0;
-      if (value > 0) {
-        for (var i = 0; i < value; ++i) {
-          jump += majorScaleUp[base];
-          base = (base + majorScaleUp[base]) % 12;
-        }
-      } else if (value < 0) {
-        for (var i = 0; i < -value; ++i) {
-          jump += majorScaleDown[base];
-          base = (base + majorScaleDown[base] + 12) % 12;
-        }
-      }
-    }
-    env.halfstep += jump;
-    return env.halfstep;
-  }
-}
-
 function ExpressionScale(value) {
   this.value = value;
   this.evaluate = function(env) {
@@ -855,6 +825,21 @@ var blockDefinitions = {
   },
 
   // Control
+  cc: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'chord %1',
+      args0: [
+        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'body' },
+      ]
+    },
+    tree: function() {
+      var bodyBlock = this.getInputTargetBlock('body');
+      return new StatementRepeat(slurpBlock(bodyBlock));
+    }
+  },
   repeat: {
     configuration: {
       colour: statementColor,
@@ -876,16 +861,16 @@ var blockDefinitions = {
       output: 'Chord',
       message0: 'chord %1 %2 %3',
       args0: [
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element0', 'check': ['Delta', 'Offset'] },
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element1', 'check': ['Delta', 'Offset'] },
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element2', 'check': ['Delta', 'Offset'] },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element0', 'check': ['Delta', 'Position'] },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element1', 'check': ['Delta', 'Position'] },
+        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element2', 'check': ['Delta', 'Position'] },
       ],
       mutator: 'setArity',
       extensions: ['addArityMenuItem'],
     },
     deltaphone: {
       arity: 3,
-      elementType: 'Offset',
+      elementType: 'Chord',
     },
     tree: function() {
       var deltas = [];
