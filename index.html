@@ -6,7 +6,8 @@
   <script src="alphaTab/Build/JavaScript/swfobject.js"></script>
   <script src="alphaTab/Build/JavaScript/AlphaTab.js"></script>
   <script src="blockly/blockly_compressed.js"></script>
-  <script src="blockly/blocks_compressed.js"></script>
+  <!-- <script src="blockly/blocks_uncompressed.js"></script> -->
+  <!-- <script src="blockly/blocksuncompressed.js"></script> -->
   <script src="blockly/msg/js/en.js"></script>
   <script src="blocks.js"></script>
   <script src="main.js"></script>
@@ -29,7 +30,7 @@
 </div>
 
 <xml id="toolbox">
-  <category name="Core">
+  <category name="Actions">
     <block type="keySignature">
       <value name="letter">
         <block type="letter">
@@ -124,17 +125,6 @@
       </value>
     </block>
   </category>
-  <category name="Loops">
-    <block type="repeat"></block>
-    <block type="repeat12"></block>
-    <block type="ditto">
-      <value name="count">
-        <block type="integer">
-          <field name="value">2</field>
-        </block>
-      </value>
-    </block>
-  </category>
   <category name="Values">
     <block type="integer"></block>
     <block type="noteDuration">
@@ -160,7 +150,19 @@
     </block>
     <block type="random"></block>
   </category>
-  <category name="Pro">
+  <category name="Structures">
+    <block type="to"></block>
+    <block type="repeat"></block>
+    <block type="repeat12"></block>
+    <block type="ditto">
+      <value name="count">
+        <block type="integer">
+          <field name="value">2</field>
+        </block>
+      </value>
+    </block>
+  </category>
+  <category name="Extra">
     <block type="play">
       <value name="note">
       </value>
@@ -208,7 +210,6 @@
     </block>
     <block type="chord"></block>
     <block type="reroot"></block>
-    <block type="cc"></block>
   </category>
 </xml>
 

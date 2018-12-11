@@ -2,6 +2,7 @@ var workspace = null;
 
 var expressionColor = 270;
 var statementColor = 180;
+var parameterColor = 330;
 
 var letters = [
   ['C', '0'],
@@ -323,6 +324,12 @@ function initialMeasure(env) {
   env.xml += '          <line>2</line>\n';
   env.xml += '        </clef>\n';
   env.xml += '      </attributes>\n';
+}
+
+function StatementTo(block) {
+  this.block = block;
+  this.evaluate = function(env) {
+  }
 }
 
 function StatementRepeat(block) {
@@ -815,7 +822,7 @@ var blockDefinitions = {
       inputsInline: true,
       message0: 'rest %1',
       args0: [
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'duration' },
+        { type: 'input_value', align: 'RIGHT', name: 'duration' },
       ]
     },
     tree: function() {
@@ -823,21 +830,57 @@ var blockDefinitions = {
       return new StatementRest(duration);
     }
   },
+  formalParameter: {
+    configuration: {
+      isMovable: false,
+      colour: parameterColor,
+      output: null,
+      inputsInline: true,
+      message0: '%1 \u2193',
+      args0: [
+        { type: 'field_input', name: 'identifier', text: '' },
+      ]
+    },
+    deltaphone: {
+      mode: 'neutral', // statement or expression
+    },
+  },
+  actualParameter: {
+    configuration: {
+      colour: expressionColor,
+      output: null,
+      inputsInline: true,
+      message0: '%1',
+      args0: [
+        { type: 'field_label', name: 'identifier', text: '' },
+      ]
+    },
+  },
 
   // Control
-  cc: {
+  to: {
     configuration: {
       colour: statementColor,
-      previousStatement: null,
-      nextStatement: null,
-      message0: 'chord %1',
+      // previousStatement: null,
+      // nextStatement: null,
+      message0: 'to %1',
       args0: [
-        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'body' },
-      ]
+        { type: 'field_input', name: 'id', text: '' },
+      ],
+      message1: '%1',
+      args1: [
+        { type: 'input_statement', name: 'body' },
+      ],
+      mutator: 'setParameters',
+      extensions: ['parameterize'],
+      inputsInline: true,
+    },
+    deltaphone: {
+      parameters: [],
     },
     tree: function() {
       var bodyBlock = this.getInputTargetBlock('body');
-      return new StatementRepeat(slurpBlock(bodyBlock));
+      return new StatementTo(slurpBlock(bodyBlock));
     }
   },
   repeat: {
@@ -847,7 +890,7 @@ var blockDefinitions = {
       nextStatement: null,
       message0: 'repeat %1',
       args0: [
-        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'body' },
+        { type: 'input_statement', name: 'body' },
       ]
     },
     tree: function() {
@@ -935,6 +978,9 @@ function initializeBlock(id) {
   Blockly.Blocks[id] = {
     init: function() {
       this.jsonInit(blockDefinitions[id].configuration);
+      if (blockDefinitions[id].configuration.hasOwnProperty('isMovable')) {
+        this.setMovable(blockDefinitions[id].configuration.isMovable);
+      }
       if (blockDefinitions[id].hasOwnProperty('deltaphone')) {
         this.deltaphone = Object.assign({}, blockDefinitions[id].deltaphone);
       }
@@ -943,13 +989,34 @@ function initializeBlock(id) {
   };
 }
 
-function triggerArity(block, arity) {
+function mutateUndoably(block, mutate, callback = null) {
   var oldMutation = block.mutationToDom();
-  block.deltaphone.arity = arity;
+  mutate();
   var newMutation = block.mutationToDom();
   block.domToMutation(newMutation);
   var event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
   Blockly.Events.fire(event);
+  if (callback) {
+    callback();
+  }
+}
+
+function triggerArity(block, arity) {
+  mutateUndoably(block, () => {
+    block.deltaphone.arity = arity;
+  });
+}
+
+function addParameter(block, mode) {
+  mutateUndoably(block, () => {
+    block.deltaphone.parameters.push({name: 'newparam', mode: mode});
+  }, () => {
+    var parameterBlock = block.inputList[block.inputList.length - 2].connection.targetBlock();
+    parameterBlock.initSvg();
+    parameterBlock.render();
+    parameterBlock.select();
+    parameterBlock.getField('identifier').showEditor_();
+  });
 }
 
 function setup() {
@@ -959,6 +1026,31 @@ function setup() {
       initializeBlock(id);
     }
   }
+
+  Blockly.Extensions.register('parameterize', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        var option = {
+          enabled: true,
+          text: 'Add value parameter...',
+          callback: function() {
+            addParameter(block, 'value');
+          }
+        };
+        options.push(option);
+
+        var option = {
+          enabled: true,
+          text: 'Add action parameter...',
+          callback: function() {
+            addParameter(block, 'action');
+          }
+        };
+        options.push(option);
+      }
+    });
+  });
 
   Blockly.Extensions.register('addArityMenuItem', function() {
     var block = this;
@@ -979,6 +1071,45 @@ function setup() {
     });
   });
 
+  Blockly.Extensions.registerMutator('setParameters', {
+    mutationToDom: function() {
+      var parametersNode = document.createElement('parameters');
+      this.deltaphone.parameters.forEach(parameter => {
+        var parameterNode = document.createElement('parameter');
+        parameterNode.setAttribute('name', parameter.name);
+        parameterNode.setAttribute('mode', parameter.mode);
+        parametersNode.appendChild(parameterNode);
+      });
+
+      var container = document.createElement('mutation');
+      container.appendChild(parametersNode);
+      return container;
+    },
+    domToMutation: function(xml) {
+      while (this.inputList.length > 2) {
+        var input = this.inputList[this.inputList.length - 2];
+        input.connection.targetBlock().dispose();
+        this.removeInput(input.name);
+      }
+
+      for (var child of xml.children) {
+        if (child.nodeName.toLowerCase() == 'parameters') {
+          for (var parameterNode of child.children) {
+            var name = parameterNode.getAttribute('name');
+            var mode = parameterNode.getAttribute('mode');
+            var input = this.appendValueInput(name);
+            var parameterBlock = workspace.newBlock('formalParameter');
+            parameterBlock.deltaphone.mode = mode;
+            console.log("mode:", mode);
+            parameterBlock.getField('identifier').setText(name);
+            input.connection.connect(parameterBlock.outputConnection);
+            this.moveNumberedInputBefore(this.inputList.length - 1, this.inputList.length - 2);
+          }
+        }
+      }
+    },
+  });
+
   Blockly.Extensions.registerMutator('setArity', {
     mutationToDom: function() {
       var container = document.createElement('mutation');
@@ -986,6 +1117,7 @@ function setup() {
       return container;
     },
     domToMutation: function(xml) {
+      console.log("d2m");
       var expectedArity = xml.getAttribute('arity');
       var actualArity = this.getInput('empty') ? 0 : this.inputList.length;
       this.deltaphone.arity = expectedArity;
@@ -1036,7 +1168,7 @@ function setup() {
   
   // Blockly recently added support for custom context menus. See
   // https://github.com/google/blockly/pull/1710 for details.
-  workspace.configureContextMenu = (options) => {
+  workspace.configureContextMenu = options => {
     var option = {
       enabled: true,
       text: 'Copy',
@@ -1061,6 +1193,7 @@ function setup() {
   var last = localStorage.getItem('last');
   if (last) {
     last = Blockly.Xml.textToDom(last);
+    console.log("last:", last);
     Blockly.Xml.domToWorkspace(last, workspace);
   }
 
@@ -1080,12 +1213,65 @@ function setup() {
   // console.log('importer:', importer);
   //
   workspace.addChangeListener(event => {
+    // console.log("event:", event);
     // if (event.type == Blockly.Events.BLOCK_CHANGE ||
         // event.type == Blockly.Events.BLOCK_DELETE ||
         // event.type == Blockly.Events.BLOCK_CREATE) {
       // console.log('reinterpret');
-      interpret();
+      // interpret();
     // }
+
+    // We want to handle a selection of a formal parameter by generating an
+    // actual parameter that can be referenced in the body. The event we care
+    // about has some compound logic to it. It must be a UI selected element
+    // event. The selection is being made if its newValue property is set,
+    // which is the ID of the formal parameter block. But formal parameters
+    // selected right after they are added, so we further require that a
+    // gesture be in progress. No gesture is in progress when a parameter is
+    // freshly added.
+
+    console.log("event:", event);
+    if (event.type == Blockly.Events.UI) {
+      if (event.hasOwnProperty('element') && event.element == 'selected') {
+        console.log(Blockly.FieldTextInput.htmlInput_);
+        // console.log("workspace.currentGesture_:", workspace.currentGesture_);
+        // console.log("workspace.currentGesture_.startField_:", workspace.currentGesture_.startField_);
+        if (event.newValue && workspace.currentGesture_ && workspace.currentGesture_.startField_ == null) {
+          var block = workspace.getBlockById(event.newValue); 
+          if (block.type == 'formalParameter') {
+            console.log("block:", block);
+
+            var name = block.getField('identifier').getText();
+            var parameterBlock = workspace.newBlock('actualParameter');
+            parameterBlock.getField('identifier').setText(name);
+
+            parameterBlock.initSvg();
+            parameterBlock.render();
+            parameterBlock.select();
+
+            var oldLocation = block.getRelativeToSurfaceXY();
+            var newLocation = parameterBlock.getRelativeToSurfaceXY();
+            parameterBlock.moveBy(oldLocation.x - newLocation.x + block.width - parameterBlock.width, oldLocation.y - newLocation.y);
+            parameterBlock.bringToFront();
+
+            workspace.currentGesture_.setStartBlock(parameterBlock);
+            workspace.currentGesture_.setTargetBlock_(parameterBlock);
+
+            if (block.deltaphone.mode == 'action') {
+              parameterBlock.setOutput(false);
+              parameterBlock.setPreviousStatement(true);
+              parameterBlock.setNextStatement(true);
+              parameterBlock.setColour(statementColor);
+            }
+          }
+        }
+      }
+    } else {
+      var xml = Blockly.Xml.workspaceToDom(workspace);
+      xml = Blockly.Xml.domToPrettyText(xml);
+      // console.log('xml:', xml);
+      localStorage.setItem('last', xml);
+    }
   });
 }
 
@@ -1093,8 +1279,8 @@ $(document).ready(setup);
 
 function interpret() {
   var xml = Blockly.Xml.workspaceToDom(workspace);
-  xml = Blockly.Xml.domToText(xml);
-  // console.log('xml:', xml);
+  xml = Blockly.Xml.domToPrettyText(xml);
+  console.log('xml:', xml);
   localStorage.setItem('last', xml);
 
   var roots = workspace.getTopBlocks();
