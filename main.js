@@ -656,7 +656,7 @@ var blockDefinitions = {
   timeSignature: {
     configuration: {
       colour: statementColor,
-      nextStatement: null,
+      // nextStatement: null,
       inputsInline: true,
       message0: 'time signature %1',
       args0: [
@@ -866,6 +866,30 @@ var blockDefinitions = {
   },
 
   // Control
+  call: {
+    configuration: {
+      colour: statementColor,
+      // previousStatement: null,
+      // nextStatement: null,
+      message0: '%1',
+      args0: [
+        { type: 'field_label', name: 'identifier', text: 'call' },
+      ],
+      // mutator: 'setParameters',
+      // extensions: ['parameterize'],
+      inputsInline: false,
+    },
+    deltaphone: {
+      defineBlockId: null,
+    },
+    // initializeState: function() {
+      // this.deltaphone.parameters = [];
+    // },
+    tree: function() {
+      var bodyBlock = this.getInputTargetBlock('body');
+      return new StatementTo(slurpBlock(bodyBlock));
+    }
+  },
   to: {
     configuration: {
       colour: statementColor,
@@ -1026,6 +1050,29 @@ function triggerArity(block, arity) {
   });
 }
 
+function generateCall(defineBlock) {
+  var callBlock = workspace.newBlock('call');
+
+  for (var parameter of defineBlock.deltaphone.parameters) {
+    var input;
+    if (parameter.mode == 'action') {
+      input = callBlock.appendStatementInput(parameter.identifier);
+    } else {
+      input = callBlock.appendValueInput(parameter.identifier);
+    }
+
+    if (defineBlock.deltaphone.parameters.length > 1) {
+      input.appendField(parameter.identifier);
+    }
+  }
+
+  callBlock.initSvg();
+  callBlock.render();
+  callBlock.select();
+  callBlock.getField('identifier').setText(defineBlock.getField('identifier').getText());
+  callBlock.deltaphone.defineBlockId = defineBlock.id;
+}
+
 function addParameter(block, mode) {
   var identifier = 'newparam';
 
@@ -1082,7 +1129,7 @@ function setup() {
       customContextMenu: function(options) {
         var option = {
           enabled: true,
-          text: 'Add value parameter...',
+          text: 'Add value parameter',
           callback: function() {
             addParameter(block, 'value');
           }
@@ -1091,9 +1138,18 @@ function setup() {
 
         var option = {
           enabled: true,
-          text: 'Add action parameter...',
+          text: 'Add action parameter',
           callback: function() {
             addParameter(block, 'action');
+          }
+        };
+        options.push(option);
+
+        var option = {
+          enabled: true,
+          text: 'Create call block',
+          callback: function() {
+            generateCall(block);
           }
         };
         options.push(option);
