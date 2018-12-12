@@ -886,7 +886,6 @@ var blockDefinitions = {
     deltaphone: {
     },
     initializeState: function() {
-      console.log("INITING................................................");
       this.deltaphone.parameters = [];
     },
     tree: function() {
@@ -1010,15 +1009,12 @@ function initializeBlock(id) {
 }
 
 function mutateUndoably(block, mutate, callback = null) {
-  console.log("undoably");
   var oldMutation = block.mutationToDom();
   mutate();
   var newMutation = block.mutationToDom();
   block.domToMutation(newMutation);
-  console.log("done mut");
   var event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
   Blockly.Events.fire(event);
-  console.log("callback");
   if (callback) {
     callback();
   }
@@ -1199,12 +1195,12 @@ function setup() {
       var container = document.createElement('mutation');
       container.setAttribute('mode', this.deltaphone.mode);
       container.setAttribute('identifier', this.deltaphone.identifier);
-      console.log("container:", container);
+      container.setAttribute('formalblockid', this.deltaphone.formalBlockId);
       return container;
     },
     domToMutation: function(xml) {
-      console.log("xml:", xml);
       this.deltaphone.mode = xml.getAttribute('mode');
+      this.deltaphone.formalBlockId = xml.getAttribute('formalblockid');
       this.deltaphone.identifier = xml.getAttribute('identifier');
       this.getField('identifier').setText(this.deltaphone.identifier);
       syncActual(this);
@@ -1398,6 +1394,7 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
 function renameActuals(root, formalBlockId, newIdentifier) {
   if (root.type == 'actualParameter' && root.deltaphone.formalBlockId == formalBlockId) {
     root.getField('identifier').setText(newIdentifier);
+    root.deltaphone.identifier = newIdentifier;
   } else {
     for (var child of root.getChildren()) {
       renameActuals(child, formalBlockId, newIdentifier);
