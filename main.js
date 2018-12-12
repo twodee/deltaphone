@@ -712,7 +712,7 @@ var blockDefinitions = {
       inputsInline: true,
       message0: 'jump %1',
       args0: [
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'note' },
+        { type: 'input_value', align: 'RIGHT', name: 'note' },
       ]
     },
     tree: function() {
@@ -728,8 +728,8 @@ var blockDefinitions = {
       inputsInline: true,
       message0: 'play %1 %2',
       args0: [
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'note' },
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'duration' },
+        { type: 'input_value', align: 'RIGHT', name: 'note' },
+        { type: 'input_value', align: 'RIGHT', name: 'duration' },
       ]
     },
     tree: function() {
@@ -836,13 +836,15 @@ var blockDefinitions = {
       colour: parameterColor,
       output: null,
       inputsInline: true,
-      message0: '%1 \u2193',
+      mutator: 'configureFormal',
+      message0: '%1 %2',
       args0: [
         { type: 'field_input', name: 'identifier', text: '' },
+        { type: 'field_label', name: 'modeArrow', text: '\u2190' },
       ]
     },
     deltaphone: {
-      mode: 'neutral', // statement or expression
+      mode: null, // action or value
     },
   },
   actualParameter: {
@@ -851,9 +853,15 @@ var blockDefinitions = {
       output: null,
       inputsInline: true,
       message0: '%1',
+      mutator: 'configureActual',
       args0: [
         { type: 'field_label', name: 'identifier', text: '' },
       ]
+    },
+    deltaphone: {
+      formalBlockId: null,
+      identifier: null,
+      mode: null,
     },
   },
 
@@ -865,7 +873,7 @@ var blockDefinitions = {
       // nextStatement: null,
       message0: 'to %1',
       args0: [
-        { type: 'field_input', name: 'id', text: '' },
+        { type: 'field_input', name: 'identifier', text: '' },
       ],
       message1: '%1',
       args1: [
@@ -876,7 +884,10 @@ var blockDefinitions = {
       inputsInline: true,
     },
     deltaphone: {
-      parameters: [],
+    },
+    initializeState: function() {
+      console.log("INITING................................................");
+      this.deltaphone.parameters = [];
     },
     tree: function() {
       var bodyBlock = this.getInputTargetBlock('body');
@@ -904,9 +915,9 @@ var blockDefinitions = {
       output: 'Chord',
       message0: 'chord %1 %2 %3',
       args0: [
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element0', 'check': ['Delta', 'Position'] },
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element1', 'check': ['Delta', 'Position'] },
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'element2', 'check': ['Delta', 'Position'] },
+        { type: 'input_value', align: 'RIGHT', name: 'element0', check: ['Delta', 'Position'] },
+        { type: 'input_value', align: 'RIGHT', name: 'element1', check: ['Delta', 'Position'] },
+        { type: 'input_value', align: 'RIGHT', name: 'element2', check: ['Delta', 'Position'] },
       ],
       mutator: 'setArity',
       extensions: ['addArityMenuItem'],
@@ -931,9 +942,9 @@ var blockDefinitions = {
       nextStatement: null,
       message0: 'repeat %1 1. %2 2. %3',
       args0: [
-        { 'type': 'input_statement', 'align': 'LEFT', 'name': 'common' },
-        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'first' },
-        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'second' },
+        { type: 'input_statement', align: 'LEFT', name: 'common' },
+        { type: 'input_statement', align: 'RIGHT', name: 'first' },
+        { type: 'input_statement', align: 'RIGHT', name: 'second' },
       ]
     },
     tree: function() {
@@ -962,8 +973,8 @@ var blockDefinitions = {
       inputsInline: true,
       message0: 'ditto %1 %2',
       args0: [
-        { 'type': 'input_value', 'align': 'RIGHT', 'name': 'count' },
-        { 'type': 'input_statement', 'align': 'RIGHT', 'name': 'body' },
+        { type: 'input_value', align: 'RIGHT', name: 'count' },
+        { type: 'input_statement', align: 'RIGHT', name: 'body' },
       ]
     },
     tree: function() {
@@ -974,28 +985,40 @@ var blockDefinitions = {
   },
 };
 
+function formalize(identifier) {
+  return '_' + identifier;
+}
+
 function initializeBlock(id) {
+  var definition = blockDefinitions[id];
   Blockly.Blocks[id] = {
     init: function() {
-      this.jsonInit(blockDefinitions[id].configuration);
-      if (blockDefinitions[id].configuration.hasOwnProperty('isMovable')) {
-        this.setMovable(blockDefinitions[id].configuration.isMovable);
+      this.jsonInit(definition.configuration);
+      if (definition.configuration.hasOwnProperty('isMovable')) {
+        this.setMovable(definition.configuration.isMovable);
       }
-      if (blockDefinitions[id].hasOwnProperty('deltaphone')) {
-        this.deltaphone = Object.assign({}, blockDefinitions[id].deltaphone);
+      if (definition.hasOwnProperty('deltaphone') ||
+          definition.hasOwnProperty('initializeState')) {
+        this.deltaphone = Object.assign({}, definition.deltaphone);
+        if (definition.hasOwnProperty('initializeState')) {
+          definition.initializeState.apply(this);
+        }
       }
     },
-    tree: blockDefinitions[id].tree
+    tree: definition.tree
   };
 }
 
 function mutateUndoably(block, mutate, callback = null) {
+  console.log("undoably");
   var oldMutation = block.mutationToDom();
   mutate();
   var newMutation = block.mutationToDom();
   block.domToMutation(newMutation);
+  console.log("done mut");
   var event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
   Blockly.Events.fire(event);
+  console.log("callback");
   if (callback) {
     callback();
   }
@@ -1008,15 +1031,45 @@ function triggerArity(block, arity) {
 }
 
 function addParameter(block, mode) {
+  var identifier = 'newparam';
+
   mutateUndoably(block, () => {
-    block.deltaphone.parameters.push({name: 'newparam', mode: mode});
+    block.deltaphone.parameters.push({identifier: identifier, mode: mode});
   }, () => {
-    var parameterBlock = block.inputList[block.inputList.length - 2].connection.targetBlock();
+    var parameterBlock = workspace.newBlock('formalParameter');
+    parameterBlock.getField('identifier').setText(identifier);
+
+    parameterBlock.deltaphone.mode = mode;
+    syncModeArrow(parameterBlock);
+
+    var input = block.getInput(formalize(identifier));
+    input.connection.connect(parameterBlock.outputConnection);
+
     parameterBlock.initSvg();
     parameterBlock.render();
     parameterBlock.select();
     parameterBlock.getField('identifier').showEditor_();
   });
+}
+
+function syncModeArrow(block) {
+  var arrow = block.deltaphone.mode == 'action' ? '\u2193' : '\u2190';
+  // var arrow = '\uFF0B';
+  block.getField('modeArrow').setText(arrow);
+}
+
+function syncActual(block) {
+  if (block.deltaphone.mode == 'action') {
+    block.setOutput(false);
+    block.setPreviousStatement(true);
+    block.setNextStatement(true);
+    block.setColour(statementColor);
+  } else {
+    block.setOutput(true);
+    block.setPreviousStatement(false);
+    block.setNextStatement(false);
+    block.setColour(expressionColor);
+  }
 }
 
 function setup() {
@@ -1074,40 +1127,88 @@ function setup() {
   Blockly.Extensions.registerMutator('setParameters', {
     mutationToDom: function() {
       var parametersNode = document.createElement('parameters');
-      this.deltaphone.parameters.forEach(parameter => {
+
+      for (var parameter of this.deltaphone.parameters) {
         var parameterNode = document.createElement('parameter');
-        parameterNode.setAttribute('name', parameter.name);
+        parameterNode.setAttribute('identifier', parameter.identifier);
         parameterNode.setAttribute('mode', parameter.mode);
         parametersNode.appendChild(parameterNode);
-      });
+      }
 
       var container = document.createElement('mutation');
       container.appendChild(parametersNode);
       return container;
     },
+    // From XML to blocks.
     domToMutation: function(xml) {
-      while (this.inputList.length > 2) {
-        var input = this.inputList[this.inputList.length - 2];
-        input.connection.targetBlock().dispose();
-        this.removeInput(input.name);
-      }
+      this.deltaphone.parameters = [];
 
+      // Populate metadata model.
       for (var child of xml.children) {
         if (child.nodeName.toLowerCase() == 'parameters') {
           for (var parameterNode of child.children) {
-            var name = parameterNode.getAttribute('name');
+            var identifier = parameterNode.getAttribute('identifier');
             var mode = parameterNode.getAttribute('mode');
-            var input = this.appendValueInput(name);
-            var parameterBlock = workspace.newBlock('formalParameter');
-            parameterBlock.deltaphone.mode = mode;
-            console.log("mode:", mode);
-            parameterBlock.getField('identifier').setText(name);
-            input.connection.connect(parameterBlock.outputConnection);
-            this.moveNumberedInputBefore(this.inputList.length - 1, this.inputList.length - 2);
+            this.deltaphone.parameters.push({ identifier: identifier, mode: mode });
           }
         }
       }
+
+      // Remove any existing inputs, but save the block in case it
+      // will need to get reconnected.
+      var oldFormalBlocks = [];
+      while (this.inputList.length > 2) {
+        var input = this.inputList[this.inputList.length - 2];
+        oldFormalBlocks.push(input.connection.targetBlock());
+        this.removeInput(input.name);
+      }
+
+      // Add inputs from model.
+      for (var parameter of this.deltaphone.parameters) {
+        var input = this.appendValueInput(formalize(parameter.identifier));
+        this.moveNumberedInputBefore(this.inputList.length - 1, this.inputList.length - 2);
+      }
+
+      // Traverse previous blocks, disposing of unused ones and reconnecting
+      // persistent ones.
+      for (var oldFormalBlock of oldFormalBlocks) {
+        var identifier = oldFormalBlock.getField('identifier').getText();
+        if (this.getInput(formalize(identifier))) {
+          this.getInput(formalize(identifier)).connection.connect(oldFormalBlock.outputConnection);
+        } else {
+          oldFormalBlock.dispose();
+        }
+      }
     },
+  });
+
+  Blockly.Extensions.registerMutator('configureFormal', {
+    mutationToDom: function() {
+      var container = document.createElement('mutation');
+      container.setAttribute('mode', this.deltaphone.mode);
+      return container;
+    },
+    domToMutation: function(xml) {
+      this.deltaphone.mode = xml.getAttribute('mode');
+      syncModeArrow(this);
+    }
+  });
+
+  Blockly.Extensions.registerMutator('configureActual', {
+    mutationToDom: function() {
+      var container = document.createElement('mutation');
+      container.setAttribute('mode', this.deltaphone.mode);
+      container.setAttribute('identifier', this.deltaphone.identifier);
+      console.log("container:", container);
+      return container;
+    },
+    domToMutation: function(xml) {
+      console.log("xml:", xml);
+      this.deltaphone.mode = xml.getAttribute('mode');
+      this.deltaphone.identifier = xml.getAttribute('identifier');
+      this.getField('identifier').setText(this.deltaphone.identifier);
+      syncActual(this);
+    }
   });
 
   Blockly.Extensions.registerMutator('setArity', {
@@ -1117,7 +1218,6 @@ function setup() {
       return container;
     },
     domToMutation: function(xml) {
-      console.log("d2m");
       var expectedArity = xml.getAttribute('arity');
       var actualArity = this.getInput('empty') ? 0 : this.inputList.length;
       this.deltaphone.arity = expectedArity;
@@ -1188,8 +1288,6 @@ function setup() {
     $('#score').alphaTab('playPause');
   });
 
-  $('#renderButton').click(interpret);
-
   var last = localStorage.getItem('last');
   if (last) {
     last = Blockly.Xml.textToDom(last);
@@ -1209,17 +1307,13 @@ function setup() {
     }
   });
 
-  // var importer = new alphaTab.importer.MusicXmlImporter();
-  // console.log('importer:', importer);
-  //
   workspace.addChangeListener(event => {
-    // console.log("event:", event);
-    // if (event.type == Blockly.Events.BLOCK_CHANGE ||
-        // event.type == Blockly.Events.BLOCK_DELETE ||
-        // event.type == Blockly.Events.BLOCK_CREATE) {
-      // console.log('reinterpret');
-      // interpret();
-    // }
+    if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
+      var block = workspace.getBlockById(event.blockId); 
+      if (block.type == 'formalParameter') {
+        renameFormal(block, event.oldValue, event.newValue);
+      }
+    }
 
     // We want to handle a selection of a formal parameter by generating an
     // actual parameter that can be referenced in the body. The event we care
@@ -1229,59 +1323,99 @@ function setup() {
     // selected right after they are added, so we further require that a
     // gesture be in progress. No gesture is in progress when a parameter is
     // freshly added.
-
-    console.log("event:", event);
-    if (event.type == Blockly.Events.UI) {
+    else if (event.type == Blockly.Events.UI) {
       if (event.hasOwnProperty('element') && event.element == 'selected') {
-        console.log(Blockly.FieldTextInput.htmlInput_);
-        // console.log("workspace.currentGesture_:", workspace.currentGesture_);
-        // console.log("workspace.currentGesture_.startField_:", workspace.currentGesture_.startField_);
         if (event.newValue && workspace.currentGesture_ && workspace.currentGesture_.startField_ == null) {
-          var block = workspace.getBlockById(event.newValue); 
-          if (block.type == 'formalParameter') {
-            console.log("block:", block);
+          var formalBlock = workspace.getBlockById(event.newValue); 
+          if (formalBlock.type == 'formalParameter') {
+            var identifier = formalBlock.getField('identifier').getText();
+            var actualBlock = workspace.newBlock('actualParameter');
 
-            var name = block.getField('identifier').getText();
-            var parameterBlock = workspace.newBlock('actualParameter');
-            parameterBlock.getField('identifier').setText(name);
+            actualBlock.deltaphone.mode = formalBlock.deltaphone.mode;
+            actualBlock.deltaphone.identifier = identifier;
+            syncActual(actualBlock);
 
-            parameterBlock.initSvg();
-            parameterBlock.render();
-            parameterBlock.select();
+            actualBlock.getField('identifier').setText(identifier);
+            actualBlock.deltaphone.formalBlockId = event.newValue;
 
-            var oldLocation = block.getRelativeToSurfaceXY();
-            var newLocation = parameterBlock.getRelativeToSurfaceXY();
-            parameterBlock.moveBy(oldLocation.x - newLocation.x + block.width - parameterBlock.width, oldLocation.y - newLocation.y);
-            parameterBlock.bringToFront();
+            var actualLocation = actualBlock.getRelativeToSurfaceXY();
+            var mouse = workspace.currentGesture_.mouseDownXY_;
 
-            workspace.currentGesture_.setStartBlock(parameterBlock);
-            workspace.currentGesture_.setTargetBlock_(parameterBlock);
+            var point = Blockly.utils.mouseToSvg({clientX: mouse.x, clientY: mouse.y}, workspace.getParentSvg(), workspace.getInverseScreenCTM());
+            var rel = workspace.getOriginOffsetInPixels();
+            var mouseX = (point.x - rel.x) / workspace.scale;
+            var mouseY = (point.y - rel.y) / workspace.scale;
 
-            if (block.deltaphone.mode == 'action') {
-              parameterBlock.setOutput(false);
-              parameterBlock.setPreviousStatement(true);
-              parameterBlock.setNextStatement(true);
-              parameterBlock.setColour(statementColor);
-            }
+            actualBlock.initSvg();
+            actualBlock.render();
+            actualBlock.select();
+            actualBlock.bringToFront();
+
+            actualBlock.moveBy(mouseX - actualLocation.x - actualBlock.width / 2, mouseY - actualLocation.y - actualBlock.height / 2);
+
+            workspace.currentGesture_.setStartBlock(actualBlock);
+            workspace.currentGesture_.setTargetBlock_(actualBlock);
           }
         }
       }
-    } else {
-      var xml = Blockly.Xml.workspaceToDom(workspace);
-      xml = Blockly.Xml.domToPrettyText(xml);
-      // console.log('xml:', xml);
-      localStorage.setItem('last', xml);
+    }
+    
+    if (event.type == Blockly.Events.BLOCK_CHANGE ||
+        event.type == Blockly.Events.BLOCK_DELETE ||
+        event.type == Blockly.Events.BLOCK_CREATE ||
+        event.type == Blockly.Events.BLOCK_MOVE) {
+      saveLocal();
+      // console.log('reinterpret');
+      // interpret();
     }
   });
 }
 
+function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
+  var parent = formalBlock.getParent();
+
+  // Rename parent's input.
+  for (var i = 1; i < parent.inputList.length - 1; ++i) {
+    if (parent.inputList[i].name == formalize(oldIdentifier)) {
+      parent.inputList[i].name = formalize(newIdentifier);
+    }
+  }
+
+  // Update parent's meta.
+  for (var parameter of parent.deltaphone.parameters) {
+    if (parameter.identifier == oldIdentifier) {
+      parameter.identifier = newIdentifier;
+      break;
+    }
+  }
+
+  // Rename all actualParameter children
+  for (var root of workspace.getTopBlocks()) {
+    renameActuals(root, formalBlock.id, newIdentifier);
+  }
+}
+
+function renameActuals(root, formalBlockId, newIdentifier) {
+  if (root.type == 'actualParameter' && root.deltaphone.formalBlockId == formalBlockId) {
+    root.getField('identifier').setText(newIdentifier);
+  } else {
+    for (var child of root.getChildren()) {
+      renameActuals(child, formalBlockId, newIdentifier);
+    }
+  }
+}
+
 $(document).ready(setup);
 
-function interpret() {
+function saveLocal() {
   var xml = Blockly.Xml.workspaceToDom(workspace);
   xml = Blockly.Xml.domToPrettyText(xml);
   console.log('xml:', xml);
   localStorage.setItem('last', xml);
+}
+
+function interpret() {
+  saveLocal();
 
   var roots = workspace.getTopBlocks();
   var statements = [];
