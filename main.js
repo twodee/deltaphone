@@ -4,6 +4,15 @@ var expressionColor = 270;
 var statementColor = 180;
 var parameterColor = 330;
 
+function ParseException(block, message) {
+  this.block = block;
+  this.message = message;
+}
+
+ParseException.prototype = Object.create(Error.prototype);
+ParseException.prototype.name = "ParseException";
+ParseException.prototype.constructor = ParseException;
+
 var letters = [
   ['C', '0'],
   ['D', '2'],
@@ -95,7 +104,13 @@ var deltas = [
 function ExpressionInteger(value) {
   this.value = value;
   this.evaluate = function(env) {
+    return this;
+  }
+  this.toInteger = function() {
     return this.value;
+  }
+  this.toString = function() {
+    return '' + this.value;
   }
 }
 
@@ -104,8 +119,8 @@ function ExpressionPosition(letter, accidental, octave) {
   this.accidental = accidental;
   this.octave = octave;
   this.evaluate = function(env) {
-    env.halfstep = 12 * this.octave.evaluate(env) + this.letter.evaluate(env) + this.accidental.evaluate(env);
-    return env.halfstep;
+    env.halfstep = 12 * this.octave.evaluate(env).toInteger() + this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
+    return new ExpressionInteger(env.halfstep);
   }
 }
 
@@ -135,14 +150,14 @@ function ExpressionDelta(deltaValue, deltaUnit) {
       }
     }
     env.halfstep += jump;
-    return env.halfstep;
+    return new ExpressionInteger(env.halfstep);
   }
 }
 
 function ExpressionScale(value) {
   this.value = value;
   this.evaluate = function(env) {
-    return this.value;
+    return new ExpressionInteger(this.value);
   }
 }
 
@@ -150,16 +165,22 @@ function ExpressionRandom(min, max) {
   this.min = min;
   this.max = max;
   this.evaluate = function(env) {
-    var minValue = this.min.evaluate(env);
-    var maxValue = this.max.evaluate(env);
-    return Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue;
+    var minValue = this.min.evaluate(env).toInteger();
+    var maxValue = this.max.evaluate(env).toInteger();
+    return new ExpressionInteger(Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue);
   }
 }
 
 function ExpressionReal(value) {
   this.value = value;
   this.evaluate = function(env) {
+    return this;
+  }
+  this.toReal = function(env) {
     return this.value;
+  }
+  this.toString = function() {
+    return '' + this.value;
   }
 }
 
@@ -241,6 +262,13 @@ function durationToName(duration) {
   return durationName;
 }
 
+function StatementPrint(message) {
+  this.message = message;
+  this.evaluate = function(env) {
+    console.log(message.evaluate(env).toString());
+  }
+}
+
 function StatementRest(duration) {
   this.duration = duration;
   this.evaluate = function(env) {
@@ -248,7 +276,7 @@ function StatementRest(duration) {
       breakMeasure(env);
       env.beats = 0;
     }
-    var d = duration.evaluate(env);
+    var d = duration.evaluate(env).toInteger();
     env.beats += 4 / d;
     env.xml += '<note><rest measure="yes"/><duration>' + d + '</duration></note>\n';
   }
@@ -274,8 +302,8 @@ function StatementKeySignature(letter, accidental, scale) {
   this.accidental = accidental;
   this.scale = scale;
   this.evaluate = function(env) {
-    env.root = this.letter.evaluate(env) + this.accidental.evaluate(env);
-    env.scale = this.scale.evaluate(env);
+    env.root = this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
+    env.scale = this.scale.evaluate(env).toInteger();
   }
 }
 
@@ -300,10 +328,17 @@ function StatementProgram(block) {
     env.xml += '  <part id="P1">\n';
     env.hasFirstMeasure = false;
     this.block.evaluate(env);
-    env.xml += '    </measure>\n';
+    if (env.hasFirstMeasure) {
+      env.xml += '    </measure>\n';
+    }
     env.xml += '  </part>\n';
     env.xml += '</score-partwise>\n';
-    $('#scratch').val(env.xml);
+
+    if (env.hasFirstMeasure) {
+      $('#scratch').val(env.xml);
+    } else {
+      $('#scratch').val('');
+    }
   }
 }
 
@@ -326,9 +361,46 @@ function initialMeasure(env) {
   env.xml += '      </attributes>\n';
 }
 
-function StatementTo(block) {
-  this.block = block;
+function StatementTo(identifier, parameters, body) {
+  this.identifier = identifier;
+  this.parameters = parameters;
+  this.body = body;
   this.evaluate = function(env) {
+    env.bindings[identifier] = {
+      identifier: this.identifier,
+      parameters: this.parameters,
+      body: this.body,
+    };
+  }
+}
+
+function StatementParameterReference(identifier) {
+  this.identifier = identifier;
+  this.evaluate = function(env) {
+    return env.bindings[this.identifier].evaluate(env);
+  }
+}
+
+function StatementCall(identifier, actualParameters) {
+  this.identifier = identifier;
+  console.log("actualParameters:", actualParameters);
+  this.evaluate = function(env) {
+    var define = env.bindings[this.identifier];
+    // var subBindings = {};
+    for (var actualParameter of actualParameters) {
+      if (actualParameter.mode == 'value') {
+        env.bindings[actualParameter.identifier] = actualParameter.expression.evaluate(env);
+      } else {
+        env.bindings[actualParameter.identifier] = actualParameter.expression;
+      }
+    }
+    // var oldBindings = env.bindings;
+    // env.bindings = subBindings;
+    console.log("env.bindings:", env.bindings);
+    console.log("this.identifier:", this.identifier);
+    var result = env.bindings[this.identifier].body.evaluate(env);
+    // env.bindings = oldBindings;
+    return result;
   }
 }
 
@@ -355,7 +427,7 @@ function StatementX(count, block) {
   this.count = count;
   this.block = block;
   this.evaluate = function(env) {
-    var n = this.count.evaluate(env);
+    var n = this.count.evaluate(env).toInteger();
     for (var i = 0; i < n; ++i) {
       this.block.evaluate(env);
     }
@@ -406,11 +478,8 @@ function StatementPlayRelative(deltaValue, deltaUnit, duration) {
   this.deltaUnit = deltaUnit;
   this.duration = duration;
   this.evaluate = function(env) {
-    var ids = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env);
-    if (!Array.isArray(ids)) {
-      ids = [ids];
-    }
-    emitNotes(env, ids, this.duration.evaluate(env));
+    var id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
+    emitNotes(env, [id], this.duration.evaluate(env));
   }
 }
 
@@ -420,11 +489,8 @@ function StatementPlayAbsolute(letter, accidental, octave, duration) {
   this.octave = octave;
   this.duration = duration;
   this.evaluate = function(env) {
-    var ids = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env);
-    if (!Array.isArray(ids)) {
-      ids = [ids];
-    }
-    emitNotes(env, ids, this.duration.evaluate(env));
+    var id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
+    emitNotes(env, [id], this.duration.evaluate(env).toInteger());
   }
 }
 
@@ -432,7 +498,7 @@ function StatementJumpRelative(deltaValue, deltaUnit) {
   this.deltaValue = deltaValue;
   this.deltaUnit = deltaUnit;
   this.evaluate = function(env) {
-    var id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env);
+    var id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
     env.halfstep = id;
   }
 }
@@ -442,7 +508,7 @@ function StatementJumpAbsolute(letter, accidental, octave) {
   this.accidental = accidental;
   this.octave = octave;
   this.evaluate = function(env) {
-    var id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env);
+    var id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
     env.halfstep = id;
   }
 }
@@ -455,7 +521,7 @@ function StatementPlay(note, duration) {
     if (!Array.isArray(ids)) {
       ids = [ids];
     }
-    emitNotes(env, ids, this.duration.evaluate(env));
+    emitNotes(env, ids, this.duration.evaluate(env).toInteger());
   }
 }
 
@@ -704,6 +770,23 @@ var blockDefinitions = {
       return new StatementKeySignature(letter, accidental, scale);
     }
   },
+  print: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'print %1',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'message' },
+      ]
+    },
+    tree: function() {
+      var message = this.getInputTargetBlock('message').tree();
+      var print = new StatementPrint(message);
+      return print;
+    }
+  },
   jump: {
     configuration: {
       colour: statementColor,
@@ -848,13 +931,13 @@ var blockDefinitions = {
       mode: null, // action or value
     },
   },
-  actualParameter: {
+  parameterReference: {
     configuration: {
       colour: expressionColor,
       output: null,
       inputsInline: true,
       message0: '%1',
-      mutator: 'configureActual',
+      mutator: 'configureParameterReference',
       args0: [
         { type: 'field_label', name: 'identifier', text: '' },
       ]
@@ -864,30 +947,42 @@ var blockDefinitions = {
       identifier: null,
       mode: null,
     },
+    tree: function() {
+      var identifier = this.getField('identifier').getText();
+      return new StatementParameterReference(identifier);
+    }
   },
 
   // Control
   call: {
     configuration: {
       colour: statementColor,
-      // previousStatement: null,
-      // nextStatement: null,
       message0: '',
       args0: [
       ],
-      // mutator: 'setParameters',
-      // extensions: ['parameterize'],
       inputsInline: false,
     },
     deltaphone: {
+      identifier: null,
       defineBlockId: null,
     },
-    // initializeState: function() {
-      // this.deltaphone.parameters = [];
-    // },
     tree: function() {
-      var bodyBlock = this.getInputTargetBlock('body');
-      return new StatementTo(slurpBlock(bodyBlock));
+      var identifier = this.deltaphone.identifier;
+      var actualParameters = [];
+      for (var input of this.inputList) {
+        var targetBlock = input.connection.targetBlock();
+        if (targetBlock != null) {
+          actualParameters.push({
+            identifier: input.name,
+            mode: input.type == Blockly.INPUT_VALUE ? 'value' : 'action',
+            expression: targetBlock.tree(),
+          });
+        } else {
+          throw new ParseException(this, 'I am missing my \'' + input.name + '\' parameter.');
+        }
+      }
+      console.log("actualParameters:", actualParameters);
+      return new StatementCall(identifier, actualParameters);
     }
   },
   to: {
@@ -913,8 +1008,13 @@ var blockDefinitions = {
       this.deltaphone.parameters = [];
     },
     tree: function() {
+      var identifier = this.getField('identifier').getText();
+      var parameters = [];
+      for (var i = 1; i < this.inputList.length - 1; ++i) {
+        parameters.push({ identifier: this.inputList[i].name });
+      }
       var bodyBlock = this.getInputTargetBlock('body');
-      return new StatementTo(slurpBlock(bodyBlock));
+      return new StatementTo(identifier, parameters, slurpBlock(bodyBlock));
     }
   },
   repeat: {
@@ -1051,6 +1151,7 @@ function triggerArity(block, arity) {
 }
 
 function generateCall(defineBlock) {
+  var identifier = defineBlock.getField('identifier').getText();
   var callBlock = workspace.newBlock('call');
 
   for (var parameter of defineBlock.deltaphone.parameters) {
@@ -1064,18 +1165,19 @@ function generateCall(defineBlock) {
     if (defineBlock.deltaphone.parameters.length > 1) {
       input.appendField(parameter.identifier);
     } else {
-      input.appendField(defineBlock.getField('identifier').getText());
+      input.appendField(identifier);
     }
   }
 
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
+  callBlock.deltaphone.identifier = identifier;
   callBlock.deltaphone.defineBlockId = defineBlock.id;
 }
 
 function removeActuals(root, formalBlockId) {
-  if (root.type == 'actualParameter' && root.deltaphone.formalBlockId == formalBlockId) {
+  if (root.type == 'parameterReference' && root.deltaphone.formalBlockId == formalBlockId) {
     root.dispose();
   } else {
     for (var child of root.getChildren()) {
@@ -1088,7 +1190,7 @@ function removeParameter(block) {
   var identifier = block.getField('identifier').getText();
   var parent = block.getParent();
 
-  // Dispose of parent's input, block itself, and any actuals.
+  // Dispose of parent's input, block itself, and any parameter references.
   parent.removeInput(formalize(identifier));
   block.dispose();
   for (var root of workspace.getTopBlocks()) {
@@ -1291,7 +1393,7 @@ function setup() {
     }
   });
 
-  Blockly.Extensions.registerMutator('configureActual', {
+  Blockly.Extensions.registerMutator('configureParameterReference', {
     mutationToDom: function() {
       var container = document.createElement('mutation');
       container.setAttribute('mode', this.deltaphone.mode);
@@ -1386,7 +1488,7 @@ function setup() {
   });
 
   $('#scorifyButton').click(() => {
-    $('#score').alphaTab('playPause');
+    interpret();
   });
 
   var last = localStorage.getItem('last');
@@ -1417,7 +1519,7 @@ function setup() {
     }
 
     // We want to handle a selection of a formal parameter by generating an
-    // actual parameter that can be referenced in the body. The event we care
+    // parameter reference that can be used in the body. The event we care
     // about has some compound logic to it. It must be a UI selected element
     // event. The selection is being made if its newValue property is set,
     // which is the ID of the formal parameter block. But formal parameters
@@ -1430,16 +1532,16 @@ function setup() {
           var formalBlock = workspace.getBlockById(event.newValue); 
           if (formalBlock.type == 'formalParameter') {
             var identifier = formalBlock.getField('identifier').getText();
-            var actualBlock = workspace.newBlock('actualParameter');
+            var referenceBlock = workspace.newBlock('parameterReference');
 
-            actualBlock.deltaphone.mode = formalBlock.deltaphone.mode;
-            actualBlock.deltaphone.identifier = identifier;
-            syncActual(actualBlock);
+            referenceBlock.deltaphone.mode = formalBlock.deltaphone.mode;
+            referenceBlock.deltaphone.identifier = identifier;
+            syncActual(referenceBlock);
 
-            actualBlock.getField('identifier').setText(identifier);
-            actualBlock.deltaphone.formalBlockId = event.newValue;
+            referenceBlock.getField('identifier').setText(identifier);
+            referenceBlock.deltaphone.formalBlockId = event.newValue;
 
-            var actualLocation = actualBlock.getRelativeToSurfaceXY();
+            var referenceLocation = referenceBlock.getRelativeToSurfaceXY();
             var mouse = workspace.currentGesture_.mouseDownXY_;
 
             var point = Blockly.utils.mouseToSvg({clientX: mouse.x, clientY: mouse.y}, workspace.getParentSvg(), workspace.getInverseScreenCTM());
@@ -1447,15 +1549,15 @@ function setup() {
             var mouseX = (point.x - rel.x) / workspace.scale;
             var mouseY = (point.y - rel.y) / workspace.scale;
 
-            actualBlock.initSvg();
-            actualBlock.render();
-            actualBlock.select();
-            actualBlock.bringToFront();
+            referenceBlock.initSvg();
+            referenceBlock.render();
+            referenceBlock.select();
+            referenceBlock.bringToFront();
 
-            actualBlock.moveBy(mouseX - actualLocation.x - actualBlock.width / 2, mouseY - actualLocation.y - actualBlock.height / 2);
+            referenceBlock.moveBy(mouseX - referenceLocation.x - referenceBlock.width / 2, mouseY - referenceLocation.y - referenceBlock.height / 2);
 
-            workspace.currentGesture_.setStartBlock(actualBlock);
-            workspace.currentGesture_.setTargetBlock_(actualBlock);
+            workspace.currentGesture_.setStartBlock(referenceBlock);
+            workspace.currentGesture_.setTargetBlock_(referenceBlock);
           }
         }
       }
@@ -1569,14 +1671,14 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
     }
   }
 
-  // Rename all actualParameter children
+  // Rename all parameterReference children
   for (var root of workspace.getTopBlocks()) {
     renameActuals(root, formalBlock.id, newIdentifier);
   }
 }
 
 function renameActuals(root, formalBlockId, newIdentifier) {
-  if (root.type == 'actualParameter' && root.deltaphone.formalBlockId == formalBlockId) {
+  if (root.type == 'parameterReference' && root.deltaphone.formalBlockId == formalBlockId) {
     root.getField('identifier').setText(newIdentifier);
     root.deltaphone.identifier = newIdentifier;
   } else {
@@ -1601,37 +1703,54 @@ function dumpXML() {
 }
 
 function interpret() {
+  if (lastWarnedBlock) {
+    lastWarnedBlock.setWarningText(null);
+    lastWarnedBlock = null;
+  }
+
   saveLocal();
 
-  var roots = workspace.getTopBlocks();
-  var statements = [];
-  roots.forEach(root => {
-    while (root) {
-      statements.push(root.tree());
-      root = root.getNextBlock();
-    }
-  });
-  var program = new StatementProgram(new StatementBlock(statements));
+  try {
+    var roots = workspace.getTopBlocks();
+    var statements = [];
+    roots.forEach(root => {
+      while (root) {
+        statements.push(root.tree());
+        root = root.getNextBlock();
+      }
+    });
+    var program = new StatementProgram(new StatementBlock(statements));
 
-  var env = {
-    isChord: false,
-    root: 0,
-    scale: 'major',
-    iMeasure: 2,
-    beats: 0,
-    halfstep: 48,
-    beatsPerMeasure: 4,
-    beatNote: 4,
-  };
-  program.evaluate(env);
-  render();
+    var env = {
+      isChord: false,
+      root: 0,
+      scale: 'major',
+      iMeasure: 2,
+      beats: 0,
+      halfstep: 48,
+      beatsPerMeasure: 4,
+      beatNote: 4,
+      bindings: {},
+    };
+    program.evaluate(env);
+    render();
+  } catch (e) {
+    lastWarnedBlock = e.block;
+    if (e.hasOwnProperty('block')) {
+      e.block.select();
+      e.block.setWarningText(e.message);
+    }
+  }
 }
+
+var lastWarnedBlock = null;
 
 function render() {
   var musicXML = $('#scratch').val();
-  console.log("musicXML:", musicXML);
-  musicXML = new TextEncoder().encode(musicXML);
-  $('#score').alphaTab('load', musicXML);
+  if (musicXML.length > 0) {
+    musicXML = new TextEncoder().encode(musicXML);
+    $('#score').alphaTab('load', musicXML);
+  }
   // $('#score').alphaTab('load', 'foo.xml');
 }
 
@@ -1641,19 +1760,6 @@ function workspaceToXml() {
 }
 
 function copyWorkspace() {
-  // var staging = document.createElement('textarea');
-  // staging.value = workspaceToXml();
-  // document.body.appendChild(staging);
-  // staging.focus();
-  // staging.select();
-  // try {
-    // var isSuccessful = document.execCommand('copy');
-    // console.log('isSuccessful:', isSuccessful);
-  // } catch (error) {
-    // console.log('error:', error);
-  // }
-  // document.body.removeChild(staging);
-  
   // The clipboard API is new. See https://developers.google.com/web/updates/2018/03/clipboardapi.
   var xml = workspaceToXml();
   navigator.clipboard.writeText(xml)
