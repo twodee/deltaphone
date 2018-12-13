@@ -12,21 +12,27 @@
   <script src="main.js"></script>
   <link rel="stylesheet" type="text/css" href="style.css">
   <link href="https://fonts.googleapis.com/css?family=Hind" rel="stylesheet">
+  <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
 </head>
 <body>
 
-<div id="blocklyEditor"></div>
-
-<textarea id="scratch"></textarea>
-
-<div id="right">
-  <div id="controls">
-    <input type="button" value="Play" id="playButton">
+<div id="root">
+  <div id="left" class="resizable-right">
+    <div id="blocklyEditor"></div>
   </div>
-  <div id="scoreWrapper">
-    <div id="score" data-player="general_user.sf2"></div>
+  <div id="right">
+    <div id="controls">
+      <input type="button" value="Scorify" id="scorifyButton">
+      <input type="button" value="Play" id="playButton">
+    </div>
+    <div id="scoreRoot">
+      <div id="score" data-player="general_user.sf2"></div>
+    </div>
   </div>
 </div>
+
+<textarea id="scratch"></textarea>
 
 <xml id="toolbox">
   <category name="Actions">

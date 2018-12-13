@@ -836,6 +836,7 @@ var blockDefinitions = {
       colour: parameterColor,
       output: null,
       inputsInline: true,
+      extensions: ['formalParameterOptions'],
       mutator: 'configureFormal',
       message0: '%1 %2',
       args0: [
@@ -871,9 +872,8 @@ var blockDefinitions = {
       colour: statementColor,
       // previousStatement: null,
       // nextStatement: null,
-      message0: '%1',
+      message0: '',
       args0: [
-        { type: 'field_label', name: 'identifier', text: 'call' },
       ],
       // mutator: 'setParameters',
       // extensions: ['parameterize'],
@@ -1063,14 +1063,43 @@ function generateCall(defineBlock) {
 
     if (defineBlock.deltaphone.parameters.length > 1) {
       input.appendField(parameter.identifier);
+    } else {
+      input.appendField(defineBlock.getField('identifier').getText());
     }
   }
 
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
-  callBlock.getField('identifier').setText(defineBlock.getField('identifier').getText());
   callBlock.deltaphone.defineBlockId = defineBlock.id;
+}
+
+function removeActuals(root, formalBlockId) {
+  if (root.type == 'actualParameter' && root.deltaphone.formalBlockId == formalBlockId) {
+    root.dispose();
+  } else {
+    for (var child of root.getChildren()) {
+      removeActuals(child, formalBlockId);
+    }
+  }
+}
+
+function removeParameter(block) {
+  var identifier = block.getField('identifier').getText();
+  var parent = block.getParent();
+
+  // Dispose of parent's input, block itself, and any actuals.
+  parent.removeInput(formalize(identifier));
+  block.dispose();
+  for (var root of workspace.getTopBlocks()) {
+    removeActuals(root, block.id);
+  }
+
+  // Remove parameter from parent's metadata.
+  var i = parent.deltaphone.parameters.findIndex(parameter => parameter.identifier == identifier);
+  if (i >= 0) {
+    parent.deltaphone.parameters.splice(i, 1);
+  }
 }
 
 function addParameter(block, mode) {
@@ -1122,6 +1151,22 @@ function setup() {
       initializeBlock(id);
     }
   }
+
+  Blockly.Extensions.register('formalParameterOptions', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        var option = {
+          enabled: true,
+          text: 'Delete parameter',
+          callback: function() {
+            removeParameter(block);
+          }
+        };
+        options.push(option);
+      }
+    });
+  });
 
   Blockly.Extensions.register('parameterize', function() {
     var block = this;
@@ -1340,6 +1385,10 @@ function setup() {
     $('#score').alphaTab('playPause');
   });
 
+  $('#scorifyButton').click(() => {
+    $('#score').alphaTab('playPause');
+  });
+
   var last = localStorage.getItem('last');
   if (last) {
     last = Blockly.Xml.textToDom(last);
@@ -1417,10 +1466,89 @@ function setup() {
         event.type == Blockly.Events.BLOCK_CREATE ||
         event.type == Blockly.Events.BLOCK_MOVE) {
       saveLocal();
-      // console.log('reinterpret');
-      // interpret();
+      interpret();
     }
   });
+
+  var directions = new Map();
+  directions.set('horizontal', ['right', 'left']);
+  directions.set('vertical', ['top', 'bottom']);
+
+  for (var [direction, sides] of directions) {
+    for (var side of sides) {
+      var resizables = document.querySelectorAll('.resizable-' + side);
+      for (var resizable of resizables) {
+        var div = document.createElement('div');
+        div.classList.add('resizer', 'resizer-' + direction, 'resizer-' + side);
+        resizable.appendChild(div);
+        div.addEventListener('mousedown', buildResizer(side, resizable));
+      }
+    }
+  }
+}
+
+function registerResizeListener(bounds, gap, resize) {
+  var unlistener = function(event) {
+    document.removeEventListener('mousemove', moveListener);
+    document.removeEventListener('mouseup', unlistener);
+    document.removeEventListener('mousedown', unlistener);
+  };
+  var moveListener = function(event) {
+    event.preventDefault();
+    if (event.buttons !== 1) {
+      unlistener();
+    } else {
+      resize(event, bounds, gap);
+      Blockly.svgResize(workspace);
+    }
+  }
+  document.addEventListener('mousemove', moveListener, false);
+  document.addEventListener('mouseup', unlistener, false);
+  document.addEventListener('mousedown', unlistener, false);
+}
+
+function buildResizer(side, element) {
+  if (side === 'right') {
+    var measureGap = (event, bounds) => event.clientX - bounds.right;
+    var resize = (event, bounds, gap) => {
+      var bounds = element.getBoundingClientRect();
+      var width = event.clientX - bounds.x - gap;
+      element.style.width = width + 'px';
+    };
+  } else if (side === 'left') {
+    var measureGap = (event, bounds) => event.clientX - bounds.left;
+    var resize = (event, bounds, gap) => {
+      var bounds = element.getBoundingClientRect();
+      var width = bounds.right - event.clientX - gap;
+      element.style.width = width + 'px';
+    };
+  } else if (side === 'top') {
+    var measureGap = (event, bounds) => event.clientY - bounds.top;
+    var resize = (event, bounds, gap) => {
+      var bounds = messagerContainer.getBoundingClientRect();
+      var height = bounds.bottom - event.clientY;
+      messagerContainer.style.height = height + 'px';
+    };
+  } else if (side === 'bottom') {
+    var measureGap = (event, bounds) => event.clientY - bounds.bottom;
+    var resize = (event, bounds, gap) => {
+      var bounds = messagerContainer.getBoundingClientRect();
+      var height = bounds.bottom - event.clientY;
+      messagerContainer.style.height = height + 'px';
+    };
+  } else {
+    throw 'Resizing ' + side + ' not supported yet.';
+  }
+
+  return function(event) {
+    if (event.buttons === 1) {
+      event.stopPropagation();
+      event.preventDefault();
+      var bounds = element.getBoundingClientRect();
+      var gap = measureGap(event, bounds);
+      registerResizeListener(bounds, gap, resize);
+    }
+  }
 }
 
 function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
@@ -1463,8 +1591,13 @@ $(document).ready(setup);
 function saveLocal() {
   var xml = Blockly.Xml.workspaceToDom(workspace);
   xml = Blockly.Xml.domToPrettyText(xml);
-  console.log('xml:', xml);
   localStorage.setItem('last', xml);
+}
+
+function dumpXML() {
+  var xml = Blockly.Xml.workspaceToDom(workspace);
+  xml = Blockly.Xml.domToPrettyText(xml);
+  console.log(xml);
 }
 
 function interpret() {
@@ -1496,6 +1629,7 @@ function interpret() {
 
 function render() {
   var musicXML = $('#scratch').val();
+  console.log("musicXML:", musicXML);
   musicXML = new TextEncoder().encode(musicXML);
   $('#score').alphaTab('load', musicXML);
   // $('#score').alphaTab('load', 'foo.xml');

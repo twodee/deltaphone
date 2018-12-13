@@ -36,11 +36,8 @@ body {
 }
 
 #blocklyEditor {
-  position: fixed;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 40vw;
+  width: 100%;
+  height: 100%;
 }
 
 #toolbox {
@@ -48,14 +45,11 @@ body {
 }
 
 #right {
-  position: fixed;
-  top: 0;
-  bottom: 0;
-  right: 0;
-  width: 60vw;
+  position: relative;
+  flex: 1;
 }
 
-#scoreWrapper {
+#scoreRoot {
   overflow: auto;
   position: absolute;
   left: 0;
@@ -88,3 +82,55 @@ body {
 .blocklyText, .blocklyHtmlInput, .blocklyTreeLabel {
   font-family: 'Hind', sans-serif !important;
 }
+
+.resizer {
+  /* background-color: yellow; */
+  position: absolute;
+  z-index: 1000000000;
+}
+
+.resizer-horizontal {
+  width: 20px;
+  top: 0;
+  bottom: 0;
+  cursor: col-resize;
+}
+
+.resizer-vertical {
+  height: 20px;
+  left: 0;
+  right: 0;
+  cursor: row-resize;
+}
+
+.resizer-right {
+  right: -10px;
+}
+
+.resizer-top {
+  top: -10px;
+}
+
+.resizer-bottom {
+  bottom: -10px;
+}
+
+#root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+
+#left {
+  position: relative;
+  min-width: 400px;
+  width: 400px;
+  height: 100%;
+}
+
+
