@@ -128,7 +128,7 @@ function ExpressionDelta(deltaValue, deltaUnit) {
   this.deltaValue = deltaValue;
   this.deltaUnit = deltaUnit;
   this.evaluate = function(env) {
-    var value = this.deltaValue.evaluate(env);
+    var value = this.deltaValue.evaluate(env).toInteger();
     var jump;
     if (this.deltaUnit.value == 1) {
       jump = value;
@@ -157,7 +157,8 @@ function ExpressionDelta(deltaValue, deltaUnit) {
 function ExpressionScale(value) {
   this.value = value;
   this.evaluate = function(env) {
-    return new ExpressionInteger(this.value);
+    console.log("value:", value);
+    return this.value;
   }
 }
 
@@ -303,7 +304,7 @@ function StatementKeySignature(letter, accidental, scale) {
   this.scale = scale;
   this.evaluate = function(env) {
     env.root = this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
-    env.scale = this.scale.evaluate(env).toInteger();
+    env.scale = this.scale.evaluate(env);
   }
 }
 
@@ -383,7 +384,6 @@ function StatementParameterReference(identifier) {
 
 function StatementCall(identifier, actualParameters) {
   this.identifier = identifier;
-  console.log("actualParameters:", actualParameters);
   this.evaluate = function(env) {
     var define = env.bindings[this.identifier];
     // var subBindings = {};
@@ -396,9 +396,8 @@ function StatementCall(identifier, actualParameters) {
     }
     // var oldBindings = env.bindings;
     // env.bindings = subBindings;
-    console.log("env.bindings:", env.bindings);
-    console.log("this.identifier:", this.identifier);
-    var result = env.bindings[this.identifier].body.evaluate(env);
+    var body = env.bindings[this.identifier].body;
+    var result = body.evaluate(env);
     // env.bindings = oldBindings;
     return result;
   }
@@ -685,7 +684,8 @@ var blockDefinitions = {
       ]
     },
     tree: function() {
-      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
+      console.log("this.getFieldValue('value'):", this.getFieldValue('value'));
+      return new ExpressionScale(this.getFieldValue('value'));
     }
   },
   real: {
@@ -767,6 +767,8 @@ var blockDefinitions = {
       var letter = this.getInputTargetBlock('letter').tree();
       var accidental = this.getInputTargetBlock('accidental').tree();
       var scale = this.getInputTargetBlock('scale').tree();
+      console.log("this.getInputTargetBlock('scale'):", this.getInputTargetBlock('scale'));
+      console.log("scale:", scale);
       return new StatementKeySignature(letter, accidental, scale);
     }
   },
@@ -958,30 +960,33 @@ var blockDefinitions = {
     configuration: {
       colour: statementColor,
       message0: '',
-      args0: [
-      ],
+      args0: [],
       inputsInline: false,
+      mutator: 'configureCall',
+      extensions: ['callOptions'],
     },
     deltaphone: {
       identifier: null,
-      defineBlockId: null,
+      toBlockId: null,
+      mode: null,
     },
     tree: function() {
       var identifier = this.deltaphone.identifier;
       var actualParameters = [];
       for (var input of this.inputList) {
-        var targetBlock = input.connection.targetBlock();
-        if (targetBlock != null) {
-          actualParameters.push({
-            identifier: input.name,
-            mode: input.type == Blockly.INPUT_VALUE ? 'value' : 'action',
-            expression: targetBlock.tree(),
-          });
-        } else {
-          throw new ParseException(this, 'I am missing my \'' + input.name + '\' parameter.');
+        if (input.name.startsWith('_')) {
+          var targetBlock = input.connection.targetBlock();
+          if (targetBlock != null) {
+            actualParameters.push({
+              identifier: unformalize(input.name),
+              mode: input.type == Blockly.INPUT_VALUE ? 'value' : 'action',
+              expression: targetBlock.tree(),
+            });
+          } else {
+            throw new ParseException(this, 'I am missing my \'' + unformalize(input.name) + '\' parameter.');
+          }
         }
       }
-      console.log("actualParameters:", actualParameters);
       return new StatementCall(identifier, actualParameters);
     }
   },
@@ -1112,6 +1117,10 @@ function formalize(identifier) {
   return '_' + identifier;
 }
 
+function unformalize(identifier) {
+  return identifier.substring(1, identifier.length);
+}
+
 function initializeBlock(id) {
   var definition = blockDefinitions[id];
   Blockly.Blocks[id] = {
@@ -1150,65 +1159,101 @@ function triggerArity(block, arity) {
   });
 }
 
-function generateCall(defineBlock) {
-  var identifier = defineBlock.getField('identifier').getText();
-  var callBlock = workspace.newBlock('call');
+function deleteTo(toBlock) {
+  for (var root of workspace.getTopBlocks()) {
+    removeCalls(root, toBlock.id);
+  }
+  toBlock.dispose();
+}
 
-  for (var parameter of defineBlock.deltaphone.parameters) {
-    var input;
-    if (parameter.mode == 'action') {
-      input = callBlock.appendStatementInput(parameter.identifier);
-    } else {
-      input = callBlock.appendValueInput(parameter.identifier);
-    }
-
-    if (defineBlock.deltaphone.parameters.length > 1) {
-      input.appendField(parameter.identifier);
-    } else {
-      input.appendField(identifier);
+function removeCalls(root, toBlockId) {
+  if (root.type == 'call' && root.deltaphone.toBlockId == toBlockId) {
+    root.dispose();
+  } else {
+    for (var child of root.getChildren()) {
+      removeCalls(child, toBlockId);
     }
   }
+}
 
+function spawnCall(toBlock, mode) {
+  var callBlock = workspace.newBlock('call');
+  callBlock.deltaphone.mode = mode;
+  shapeCallFromTo(toBlock, callBlock);
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
-  callBlock.deltaphone.identifier = identifier;
-  callBlock.deltaphone.defineBlockId = defineBlock.id;
 }
 
-function removeActuals(root, formalBlockId) {
+function shapeCallFromTo(toBlock, callBlock) {
+  var identifier = toBlock.getField('identifier').getText();
+  shapeCall(callBlock, toBlock.id, identifier, toBlock.deltaphone.parameters);
+}
+
+function shapeCall(callBlock, toBlockId, identifier, parameters) {
+  callBlock.deltaphone.identifier = identifier;
+  callBlock.deltaphone.toBlockId = toBlockId;
+  syncMode(callBlock);
+
+  if (parameters.length == 0) {
+    var input = callBlock.appendDummyInput();
+    input.appendField(identifier);
+  } else {
+    for (var [index, parameter] of parameters.entries()) {
+      var input;
+      if (parameter.mode == 'action') {
+        input = callBlock.appendStatementInput(formalize(parameter.identifier));
+      } else {
+        input = callBlock.appendValueInput(formalize(parameter.identifier));
+      }
+      
+      // Tack on the function name for first row.
+      if (index == 0) {
+        input.appendField(identifier);
+      }
+
+      // Only name parameters when there are multiple.
+      if (parameters.length > 1) {
+        input.appendField(parameter.identifier).setAlign(Blockly.ALIGN_RIGHT);
+      }
+    }
+  }
+}
+
+function removeParameterReferences(root, formalBlockId) {
   if (root.type == 'parameterReference' && root.deltaphone.formalBlockId == formalBlockId) {
     root.dispose();
   } else {
     for (var child of root.getChildren()) {
-      removeActuals(child, formalBlockId);
+      removeParameterReferences(child, formalBlockId);
     }
   }
 }
 
-function removeParameter(block) {
-  var identifier = block.getField('identifier').getText();
-  var parent = block.getParent();
-
-  // Dispose of parent's input, block itself, and any parameter references.
-  parent.removeInput(formalize(identifier));
-  block.dispose();
-  for (var root of workspace.getTopBlocks()) {
-    removeActuals(root, block.id);
-  }
+function removeParameter(formalBlock) {
+  var identifier = formalBlock.getField('identifier').getText();
+  var toBlock = formalBlock.getParent();
 
   // Remove parameter from parent's metadata.
-  var i = parent.deltaphone.parameters.findIndex(parameter => parameter.identifier == identifier);
+  var i = toBlock.deltaphone.parameters.findIndex(parameter => parameter.identifier == identifier);
   if (i >= 0) {
-    parent.deltaphone.parameters.splice(i, 1);
+    toBlock.deltaphone.parameters.splice(i, 1);
+  }
+
+  // Dispose of parent's input, block itself, and any parameter references.
+  toBlock.removeInput(formalize(identifier));
+  formalBlock.dispose();
+  for (var root of workspace.getTopBlocks()) {
+    removeParameterReferences(root, formalBlock.id);
+    syncCallsToTo(root, toBlock);
   }
 }
 
-function addParameter(block, mode) {
+function addParameter(toBlock, mode) {
   var identifier = 'newparam';
 
-  mutateUndoably(block, () => {
-    block.deltaphone.parameters.push({identifier: identifier, mode: mode});
+  mutateUndoably(toBlock, () => {
+    toBlock.deltaphone.parameters.push({identifier: identifier, mode: mode});
   }, () => {
     var parameterBlock = workspace.newBlock('formalParameter');
     parameterBlock.getField('identifier').setText(identifier);
@@ -1216,14 +1261,60 @@ function addParameter(block, mode) {
     parameterBlock.deltaphone.mode = mode;
     syncModeArrow(parameterBlock);
 
-    var input = block.getInput(formalize(identifier));
+    var input = toBlock.getInput(formalize(identifier));
     input.connection.connect(parameterBlock.outputConnection);
 
     parameterBlock.initSvg();
     parameterBlock.render();
     parameterBlock.select();
     parameterBlock.getField('identifier').showEditor_();
+
+    // Add input to all calls.
+    for (var root of workspace.getTopBlocks()) {
+      syncCallsToTo(root, toBlock);
+    }
   });
+}
+
+function syncCallToTo(toBlock, callBlock) {
+  // Remove all inputs from call, but hang on to them just in case we need to
+  // reconnect them later.
+  var oldActuals = new Map();
+  for (var i = callBlock.inputList.length - 1; i >= 0; --i) {
+    var callInput = callBlock.inputList[i];
+    if (callInput.name.startsWith('_')) {
+      var actualBlock = callBlock.getInputTargetBlock(callInput.name);
+      if (actualBlock) {
+        oldActuals.set(callInput.name, actualBlock);
+      }
+    }
+    callBlock.removeInput(callInput.name);
+  }
+
+  shapeCallFromTo(toBlock, callBlock);
+
+  // Restore any actual parameter blocks that persisted across the shape change.
+  for (var [name, actualBlock] of oldActuals) {
+    var identifier = name.substring(1, name.length);
+    var formalParameter = toBlock.deltaphone.parameters.find(parameter => parameter.identifier == identifier);
+    if (formalParameter) {
+      if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
+        callBlock.getInput(name).connection.connect(actualBlock.outputConnection);
+      } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
+        callBlock.getInput(name).connection.connect(actualBlock.previousConnection);
+      }
+    }
+  }
+}
+
+function syncCallsToTo(root, toBlock) {
+  if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
+    syncCallToTo(toBlock, root);
+  } else {
+    for (var child of root.getChildren()) {
+      syncCallsToTo(child, toBlock);
+    }
+  }
 }
 
 function syncModeArrow(block) {
@@ -1232,16 +1323,16 @@ function syncModeArrow(block) {
   block.getField('modeArrow').setText(arrow);
 }
 
-function syncActual(block) {
+function syncMode(block) {
   if (block.deltaphone.mode == 'action') {
     block.setOutput(false);
     block.setPreviousStatement(true);
     block.setNextStatement(true);
     block.setColour(statementColor);
   } else {
-    block.setOutput(true);
     block.setPreviousStatement(false);
     block.setNextStatement(false);
+    block.setOutput(true);
     block.setColour(expressionColor);
   }
 }
@@ -1253,6 +1344,23 @@ function setup() {
       initializeBlock(id);
     }
   }
+
+  Blockly.Extensions.register('callOptions', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        var option = {
+          enabled: true,
+          text: 'Convert to ' + (block.deltaphone.mode == 'action' ? 'value' : 'action'),
+          callback: function() {
+            block.deltaphone.mode = block.deltaphone.mode == 'action' ? 'value' : 'action';
+            syncMode(block);
+          }
+        };
+        options.push(option);
+      }
+    });
+  });
 
   Blockly.Extensions.register('formalParameterOptions', function() {
     var block = this;
@@ -1294,9 +1402,27 @@ function setup() {
 
         var option = {
           enabled: true,
-          text: 'Create call block',
+          text: 'Spawn value call',
           callback: function() {
-            generateCall(block);
+            spawnCall(block, 'value');
+          }
+        };
+        options.push(option);
+
+        var option = {
+          enabled: true,
+          text: 'Spawn action call',
+          callback: function() {
+            spawnCall(block, 'action');
+          }
+        };
+        options.push(option);
+
+        var option = {
+          enabled: true,
+          text: 'Delete action and calls',
+          callback: function() {
+            deleteTo(block);
           }
         };
         options.push(option);
@@ -1381,6 +1507,57 @@ function setup() {
     },
   });
 
+  Blockly.Extensions.registerMutator('configureCall', {
+    mutationToDom: function() {
+      var toBlock = workspace.getBlockById(this.deltaphone.toBlockId);
+      if (!toBlock) {
+        return;
+      }
+
+      var container = document.createElement('mutation');
+      container.setAttribute('mode', this.deltaphone.mode);
+
+      var toElement = document.createElement('to');
+      toElement.setAttribute('id', toBlock.id);
+      toElement.setAttribute('identifier', toBlock.getField('identifier').getText());
+      container.appendChild(toElement);
+
+      var parametersElement = document.createElement('parameters');
+      for (var parameter of toBlock.deltaphone.parameters) {
+        var parameterElement = document.createElement('parameter');
+        parameterElement.setAttribute("identifier", parameter.identifier);
+        parameterElement.setAttribute("mode", parameter.mode);
+        parametersElement.appendChild(parameterElement);
+      } 
+
+      container.appendChild(parametersElement);
+
+      return container;
+    },
+    domToMutation: function(xml) {
+      var toBlockId = null;
+      var toIdentifier = null;
+      var parameters = [];
+
+      this.deltaphone.mode = xml.getAttribute('mode');
+
+      for (var child of xml.children) {
+        if (child.nodeName.toLowerCase() == 'to') {
+          toBlockId = child.getAttribute('id');
+          toIdentifier = child.getAttribute('identifier');
+        } else if (child.nodeName.toLowerCase() == 'parameters') {
+          for (var parameterNode of child.children) {
+            var identifier = parameterNode.getAttribute('identifier');
+            var mode = parameterNode.getAttribute('mode');
+            parameters.push({ identifier: identifier, mode: mode });
+          }
+        }
+      }
+
+      shapeCall(this, toBlockId, toIdentifier, parameters);
+    }
+  });
+
   Blockly.Extensions.registerMutator('configureFormal', {
     mutationToDom: function() {
       var container = document.createElement('mutation');
@@ -1406,7 +1583,7 @@ function setup() {
       this.deltaphone.formalBlockId = xml.getAttribute('formalblockid');
       this.deltaphone.identifier = xml.getAttribute('identifier');
       this.getField('identifier').setText(this.deltaphone.identifier);
-      syncActual(this);
+      syncMode(this);
     }
   });
 
@@ -1515,6 +1692,8 @@ function setup() {
       var block = workspace.getBlockById(event.blockId); 
       if (block.type == 'formalParameter') {
         renameFormal(block, event.oldValue, event.newValue);
+      } else if (block.type == 'to') {
+        renameTo(block, event.oldValue, event.newValue);
       }
     }
 
@@ -1536,7 +1715,7 @@ function setup() {
 
             referenceBlock.deltaphone.mode = formalBlock.deltaphone.mode;
             referenceBlock.deltaphone.identifier = identifier;
-            syncActual(referenceBlock);
+            syncMode(referenceBlock);
 
             referenceBlock.getField('identifier').setText(identifier);
             referenceBlock.deltaphone.formalBlockId = event.newValue;
@@ -1653,6 +1832,12 @@ function buildResizer(side, element) {
   }
 }
 
+function renameTo(toBlock, oldIdentifier, newIdentifier) {
+  for (var root of workspace.getTopBlocks()) {
+    syncCallsToTo(root, toBlock);
+  }
+}
+
 function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   var parent = formalBlock.getParent();
 
@@ -1671,19 +1856,32 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
     }
   }
 
-  // Rename all parameterReference children
+  // Rename all parameterReference children.
   for (var root of workspace.getTopBlocks()) {
-    renameActuals(root, formalBlock.id, newIdentifier);
+    renameParameterReferences(root, formalBlock.id, newIdentifier);
+    renameActuals(root, parent, oldIdentifier, newIdentifier);
   }
 }
 
-function renameActuals(root, formalBlockId, newIdentifier) {
+function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
+  if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
+    var input = root.getInput(formalize(oldIdentifier));
+    input.name = newIdentifier;
+    syncCallToTo(toBlock, root);
+  } else {
+    for (var child of root.getChildren()) {
+      renameActuals(child, toBlock, oldIdentifier, newIdentifier);
+    }
+  }
+}
+
+function renameParameterReferences(root, formalBlockId, newIdentifier) {
   if (root.type == 'parameterReference' && root.deltaphone.formalBlockId == formalBlockId) {
     root.getField('identifier').setText(newIdentifier);
     root.deltaphone.identifier = newIdentifier;
   } else {
     for (var child of root.getChildren()) {
-      renameActuals(child, formalBlockId, newIdentifier);
+      renameParameterReferences(child, formalBlockId, newIdentifier);
     }
   }
 }
@@ -1703,7 +1901,9 @@ function dumpXML() {
 }
 
 function interpret() {
-  if (lastWarnedBlock) {
+  // We must also check that the workspace is valid we may be trying to set the
+  // warning text of disposed block.
+  if (lastWarnedBlock && lastWarnedBlock.workspace) {
     lastWarnedBlock.setWarningText(null);
     lastWarnedBlock = null;
   }
@@ -1739,6 +1939,8 @@ function interpret() {
     if (e.hasOwnProperty('block')) {
       e.block.select();
       e.block.setWarningText(e.message);
+    } else {
+      console.log(e);
     }
   }
 }
