@@ -101,6 +101,291 @@ var deltas = [
   ['-12', '-12'],
 ];
 
+function Song() {
+  this.items = [];
+  this.toXML = function(env) {
+    var xml = '';
+    xml  = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
+    xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
+    xml += '<score-partwise version="3.0">\n';
+    xml += '  <part-list>\n';
+    xml += '    <score-part id="P1">\n';
+    xml += '      <part-name>Music</part-name>\n';
+    xml += '    </score-part>\n';
+    xml += '  </part-list>\n';
+    xml += '  <part id="P1">\n';
+    xml += '    <measure number="1">\n';
+    xml += '      <attributes>\n';
+    xml += '        <divisions>8</divisions>\n';
+    xml += '        <key>\n';
+    xml += '          <fifths>0</fifths>\n';
+    xml += '        </key>\n';
+    xml += '        <time>\n';
+    xml += '          <beats>' + env.beatsPerMeasure + '</beats>\n';
+    xml += '          <beat-type>' + env.beatNote + '</beat-type>\n';
+    xml += '        </time>\n';
+    xml += '        <clef>\n';
+    xml += '          <sign>G</sign>\n';
+    xml += '          <line>2</line>\n';
+    xml += '        </clef>\n';
+    xml += '      </attributes>\n';
+
+    for (var item of this.items) {
+      xml += item.toXML(env);
+    }
+
+    xml += '    </measure>\n';
+    xml += '  </part>\n';
+    xml += '</score-partwise>\n';
+
+    return xml;
+  };
+  this.push = function(item) {
+    this.items.push(item);
+  };
+}
+
+function Sequence() {
+  this.items = [];
+  this.toXML = function(env) {
+    var xml = '';
+
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+
+    for (var item of this.items) {
+      xml += item.toXML(env);
+    }
+
+    return xml;
+  };
+  this.push = function(item) {
+    this.items.push(item);
+  };
+  this.markFirstNote = function(item) {
+    for (var item of this.items) {
+      if (item.markFirstNote()) {
+        return true;
+      }
+    }
+    return false;
+  };
+  this.markLastNote = function(item) {
+    for (var i = this.items.length - 1; i >= 0; --i) {
+      var item = this.items[i];
+      if (item.markLastNote()) {
+        return true;
+      }
+    }
+    return false;
+  };
+  this.markMiddleNotes = function(item) {
+    for (var item of this.items) {
+      item.markMiddleNotes();
+    }
+  };
+}
+
+function Slur() {
+  this.items = [];
+  this.toXML = function(env) {
+    var xml = '';
+
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+
+    this.markFirstNote();
+    this.markLastNote();
+    this.markMiddleNotes();
+
+    env.isSlur = true;
+    for (var item of this.items) {
+      xml += item.toXML(env);
+    }
+    env.isSlur = false;
+
+    return xml;
+  };
+  this.push = function(item) {
+    this.items.push(item);
+  };
+  this.markFirstNote = function(item) {
+    for (var item of this.items) {
+      if (item.markFirstNote()) {
+        return true;
+      }
+    }
+    return false;
+  };
+  this.markLastNote = function(item) {
+    for (var i = this.items.length - 1; i >= 0; --i) {
+      var item = this.items[i];
+      if (item.markLastNote()) {
+        return true;
+      }
+    }
+    return false;
+  };
+  this.markMiddleNotes = function(item) {
+    for (var item of this.items) {
+      item.markMiddleNotes();
+    }
+  };
+}
+
+function Repeat12(common, first, second) {
+  this.items = [];
+  this.toXML = function(env) {
+    var xml = '';
+
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+
+    xml += '<barline location="left">\n';
+    xml += '  <bar-style>heavy-light</bar-style>\n';
+    xml += '  <repeat direction="forward"/>\n';
+    xml += '</barline>';
+
+    xml += common.toXML(env);
+
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+
+    xml += '<barline location="left">\n';
+    xml += '  <ending type="start" number="1"/>\n';
+    xml += '</barline>';
+
+    xml += first.toXML(env);
+
+    xml += '<barline location="right">\n';
+    xml += '  <bar-style>light-heavy</bar-style>\n';
+    xml += '  <repeat direction="backward"/>\n';
+    xml += '</barline>';
+
+    xml += second.toXML(env);
+
+    xml += '<barline location="right">\n';
+    xml += '  <ending type="discontinue" number="2"/>\n';
+    xml += '</barline>';
+
+    return xml;
+  };
+}
+
+function Repeat() {
+  this.items = [];
+  this.toXML = function(env) {
+    var xml = '';
+
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+
+    xml += '<barline location="left">\n';
+    xml += '  <bar-style>heavy-light</bar-style>\n';
+    xml += '  <repeat direction="forward"/>\n';
+    xml += '</barline>';
+
+    for (var item of this.items) {
+      xml += item.toXML(env);
+    }
+
+    xml += '<barline location="right">\n';
+    xml += '  <bar-style>light-heavy</bar-style>\n';
+    xml += '  <repeat direction="backward"/>\n';
+    xml += '</barline>';
+
+    return xml;
+  };
+  this.push = function(item) {
+    this.items.push(item);
+  };
+}
+
+function Note(id, duration) {
+  this.id = id;
+  this.duration = duration;
+  this.isChord = false;
+  this.isFirstNote = false;
+  this.isLastNote = false;
+  this.isMiddleNote = false;
+  this.toXML = function(env) {
+    var xml = '';
+
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+    env.beats += 4 / this.duration;
+
+    var alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
+    var alpha = alphas[id % 12];
+    var octave = Math.floor(id / 12);
+    var alter;
+    if (alpha.length > 1) {
+      if (alpha[1] == '#') {
+        alter = 1;
+      } else {
+        alter = -1;
+      }
+    } else {
+      alter = 0;
+    }
+    xml += '<note><pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(duration) + '</type>';
+    if (this.isChord) {
+      xml += '<chord/>';
+    }
+
+    if (env.isSlur) {
+      if (this.isFirstNote) {
+        xml += '<notations><slur type="start"/></notations>';
+      } else if (this.isMiddleNote) {
+        xml += '<notations><slur type="continue"/></notations>';
+      } else if (this.isLastNote) {
+        xml += '<notations><slur type="stop"/></notations>';
+      }
+    }
+
+    xml += '</note>\n';
+
+    return xml;
+  };
+  this.markFirstNote = function(item) {
+    this.isFirstNote = true;
+    return true;
+  };
+  this.markLastNote = function(item) {
+    this.isLastNote = true;
+    return true;
+  };
+  this.markMiddleNotes = function(item) {
+    this.isMiddleNote = !this.isFirstNote && !this.isLastNote;
+  };
+}
+
+function Rest(duration) {
+  this.duration = duration;
+  this.toXML = function(env) {
+    var xml = '';
+    if (env.beats == env.beatsPerMeasure) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+    env.beats += 4 / duration;
+    xml += '<note><rest measure="yes"/><duration>' + duration + '</duration></note>\n';
+    return xml;
+  };
+}
+
 function ExpressionInteger(value) {
   this.value = value;
   this.evaluate = function(env) {
@@ -196,55 +481,6 @@ function ExpressionChord(notes) {
   }
 }
 
-function emitNote(env, id, duration, isChord) {
-  var alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-  var alpha = alphas[id % 12];
-  var octave = Math.floor(id / 12);
-  var alter;
-  if (alpha.length > 1) {
-    if (alpha[1] == '#') {
-      alter = 1;
-    } else {
-      alter = -1;
-    }
-  } else {
-    alter = 0;
-  }
-  // 1 -> 32  | 2 ^ 0 -> 2 ^ 5
-  // 2 -> 16  | 2 ^ 1 -> 2 ^ 4
-  // 4 -> 8   | 2 ^ 2 -> 2 ^ 3
-  // 8 -> 4   | 2 ^ 3 -> 2 ^ 2
-  // 16 -> 2  | 2 ^ 4 -> 2 ^ 1
-  // 32 -> 1  | 2 ^ 5 -> 2 ^ 0
-  // x' = 2 ^ (5 - log2(x))
-  // var divisions = 1 << (5 - Math.log2(duration));
-  var chord = isChord ? '<chord/>' : '';
-  env.xml += '<note>' + chord + '<pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(duration) + '</type></note>\n';
-}
-
-function emitNotes(env, ids, duration) {
-  if (!env.hasFirstMeasure) {
-    initialMeasure(env);
-  }
-  if (env.beats == env.beatsPerMeasure) {
-    breakMeasure(env);
-    env.beats = 0;
-  }
-  env.beats += 4 / duration;
-  // 1 -> 32  | 2 ^ 0 -> 2 ^ 5
-  // 2 -> 16  | 2 ^ 1 -> 2 ^ 4
-  // 4 -> 8   | 2 ^ 2 -> 2 ^ 3
-  // 8 -> 4   | 2 ^ 3 -> 2 ^ 2
-  // 16 -> 2  | 2 ^ 4 -> 2 ^ 1
-  // 32 -> 1  | 2 ^ 5 -> 2 ^ 0
-  // x' = 2 ^ (5 - log2(x))
-  // var divisions = 1 << (5 - Math.log2(duration));
-  emitNote(env, ids[0], duration, false);
-  for (var i = 1; i < ids.length; ++i) {
-    emitNote(env, ids[i], duration, true);
-  }
-}
-
 function durationToName(duration) {
   var durationName = null;
   if (duration == 1) {
@@ -273,19 +509,32 @@ function StatementPrint(message) {
 function StatementRest(duration) {
   this.duration = duration;
   this.evaluate = function(env) {
-    if (env.beats == env.beatsPerMeasure) {
-      breakMeasure(env);
-      env.beats = 0;
-    }
-    var d = duration.evaluate(env).toInteger();
-    env.beats += 4 / d;
-    env.xml += '<note><rest measure="yes"/><duration>' + d + '</duration></note>\n';
+    var durationValue = duration.evaluate(env).toInteger();
+    env.emit(new Rest(durationValue));
   }
 }
 
 function StatementReroot() {
   this.evaluate = function(env) {
     env.root = env.halfstep % 12;
+  }
+}
+
+function StatementMark() {
+  this.evaluate = function(env) {
+    env.marks.push(env.halfstep);
+  }
+}
+
+function StatementBack() {
+  this.evaluate = function(env) {
+    env.halfstep = env.marks[env.marks.length - 1];
+  }
+}
+
+function StatementUnmark() {
+  this.evaluate = function(env) {
+    env.marks.pop();
   }
 }
 
@@ -311,55 +560,18 @@ function StatementKeySignature(letter, accidental, scale) {
 function StatementBlock(statements) {
   this.statements = statements;
   this.evaluate = function(env) {
-    statements.forEach(statement => statement.evaluate(env));
+    for (var statement of statements) {
+      statement.evaluate(env);
+    }
   }
 }
 
 function StatementProgram(block) {
   this.block = block;
   this.evaluate = function(env) {
-    env.xml = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
-    env.xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
-    env.xml += '<score-partwise version="3.0">\n';
-    env.xml += '  <part-list>\n';
-    env.xml += '    <score-part id="P1">\n';
-    env.xml += '      <part-name>Music</part-name>\n';
-    env.xml += '    </score-part>\n';
-    env.xml += '  </part-list>\n';
-    env.xml += '  <part id="P1">\n';
-    env.hasFirstMeasure = false;
+    env.push(new Song());
     this.block.evaluate(env);
-    if (env.hasFirstMeasure) {
-      env.xml += '    </measure>\n';
-    }
-    env.xml += '  </part>\n';
-    env.xml += '</score-partwise>\n';
-
-    if (env.hasFirstMeasure) {
-      $('#scratch').val(env.xml);
-    } else {
-      $('#scratch').val('');
-    }
   }
-}
-
-function initialMeasure(env) {
-  env.hasFirstMeasure = true;
-  env.xml += '    <measure number="1">\n';
-  env.xml += '      <attributes>\n';
-  env.xml += '        <divisions>8</divisions>\n';
-  env.xml += '        <key>\n';
-  env.xml += '          <fifths>0</fifths>\n';
-  env.xml += '        </key>\n';
-  env.xml += '        <time>\n';
-  env.xml += '          <beats>' + env.beatsPerMeasure + '</beats>\n';
-  env.xml += '          <beat-type>' + env.beatNote + '</beat-type>\n';
-  env.xml += '        </time>\n';
-  env.xml += '        <clef>\n';
-  env.xml += '          <sign>G</sign>\n';
-  env.xml += '          <line>2</line>\n';
-  env.xml += '        </clef>\n';
-  env.xml += '      </attributes>\n';
 }
 
 function StatementTo(identifier, parameters, body) {
@@ -406,19 +618,20 @@ function StatementCall(identifier, actualParameters) {
 function StatementRepeat(block) {
   this.block = block;
   this.evaluate = function(env) {
-    if (env.beats == env.beatsPerMeasure) {
-      breakMeasure(env);
-      env.beats = 0;
-    }
-    env.xml += '<barline location="left">\n';
-    env.xml += '  <bar-style>heavy-light</bar-style>\n';
-    env.xml += '  <repeat direction="forward"/>\n';
-    env.xml += '</barline>';
+    env.push(new Repeat());
     this.block.evaluate(env);
-    env.xml += '<barline location="right">\n';
-    env.xml += '  <bar-style>light-heavy</bar-style>\n';
-    env.xml += '  <repeat direction="backward"/>\n';
-    env.xml += '</barline>';
+    var sequence = env.pop();
+    env.emit(sequence);
+  }
+}
+
+function StatementSlur(block) {
+  this.block = block;
+  this.evaluate = function(env) {
+    env.push(new Slur());
+    this.block.evaluate(env);
+    var sequence = env.pop();
+    env.emit(sequence);
   }
 }
 
@@ -438,31 +651,20 @@ function StatementRepeat12(common, first, second) {
   this.first = first;
   this.second = second;
   this.evaluate = function(env) {
-    if (env.beats == env.beatsPerMeasure) {
-      breakMeasure(env);
-      env.beats = 0;
-    }
-    env.xml += '<barline location="left">\n';
-    env.xml += '  <bar-style>heavy-light</bar-style>\n';
-    env.xml += '  <repeat direction="forward"/>\n';
-    env.xml += '</barline>';
+    env.push(new Sequence());
     this.common.evaluate(env);
-    this.first.evaluate(env);
-    env.xml += '<barline location="left">\n';
-    env.xml += '  <ending type="start" number="1"/>\n';
-    env.xml += '</barline>';
-    env.xml += '<barline location="right">\n';
-    env.xml += '  <bar-style>light-heavy</bar-style>\n';
-    env.xml += '  <repeat direction="backward"/>\n';
-    env.xml += '</barline>';
-    this.second.evaluate(env);
-    env.xml += '<barline location="right">\n';
-    env.xml += '  <ending type="discontinue" number="2"/>\n';
-    env.xml += '</barline>';
-  }
-}
+    var commonSequence = env.pop();
 
-function deltaAt(env, delta) {
+    env.push(new Sequence());
+    this.first.evaluate(env);
+    var firstEndingSequence = env.pop();
+
+    env.push(new Sequence());
+    this.second.evaluate(env);
+    var secondEndingSequence = env.pop();
+
+    env.emit(new Repeat12(commonSequence, firstEndingSequence, secondEndingSequence));
+  }
 }
 
 function StatementJump(note) {
@@ -478,7 +680,8 @@ function StatementPlayRelative(deltaValue, deltaUnit, duration) {
   this.duration = duration;
   this.evaluate = function(env) {
     var id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
-    emitNotes(env, [id], this.duration.evaluate(env));
+    var durationValue = this.duration.evaluate(env).toInteger();
+    env.emit(new Note(id, durationValue));
   }
 }
 
@@ -489,7 +692,8 @@ function StatementPlayAbsolute(letter, accidental, octave, duration) {
   this.duration = duration;
   this.evaluate = function(env) {
     var id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
-    emitNotes(env, [id], this.duration.evaluate(env).toInteger());
+    var durationValue = this.duration.evaluate(env).toInteger();
+    env.emit(new Note(id, durationValue));
   }
 }
 
@@ -516,11 +720,13 @@ function StatementPlay(note, duration) {
   this.note = note;
   this.duration = duration;
   this.evaluate = function(env) {
+    var durationValue = this.duration.evaluate(env).toInteger();
     var ids = this.note.evaluate(env);
-    if (!Array.isArray(ids)) {
-      ids = [ids];
+    if (Array.isArray(ids)) {
+      env.emit(new Chord(ids.map(id => new Note(id, durationValue))));
+    } else {
+      env.emit(new Note(ids, durationValue));
     }
-    emitNotes(env, ids, this.duration.evaluate(env).toInteger());
   }
 }
 
@@ -538,12 +744,16 @@ function slurpBlock(block) {
 }
 
 function breakMeasure(env) {
-  env.xml += '    </measure>\n';
-  env.xml += '    <measure number="' + env.iMeasure + '">\n';
-  env.xml += '      <attributes>\n';
-  env.xml += '        <divisions>8</divisions>\n';
-  env.xml += '      </attributes>\n';
+  var xml = '';
+
+  xml += '    </measure>\n';
+  xml += '    <measure number="' + env.iMeasure + '">\n';
+  xml += '      <attributes>\n';
+  xml += '        <divisions>8</divisions>\n';
+  xml += '      </attributes>\n';
   ++env.iMeasure;
+
+  return xml;
 }
 
 var blockDefinitions = {
@@ -684,7 +894,6 @@ var blockDefinitions = {
       ]
     },
     tree: function() {
-      console.log("this.getFieldValue('value'):", this.getFieldValue('value'));
       return new ExpressionScale(this.getFieldValue('value'));
     }
   },
@@ -767,8 +976,6 @@ var blockDefinitions = {
       var letter = this.getInputTargetBlock('letter').tree();
       var accidental = this.getInputTargetBlock('accidental').tree();
       var scale = this.getInputTargetBlock('scale').tree();
-      console.log("this.getInputTargetBlock('scale'):", this.getInputTargetBlock('scale'));
-      console.log("scale:", scale);
       return new StatementKeySignature(letter, accidental, scale);
     }
   },
@@ -977,11 +1184,19 @@ var blockDefinitions = {
         if (input.name.startsWith('_')) {
           var targetBlock = input.connection.targetBlock();
           if (targetBlock != null) {
-            actualParameters.push({
-              identifier: unformalize(input.name),
-              mode: input.type == Blockly.INPUT_VALUE ? 'value' : 'action',
-              expression: targetBlock.tree(),
-            });
+            if (input.type == Blockly.INPUT_VALUE) {
+              actualParameters.push({
+                identifier: unformalize(input.name),
+                mode: 'value',
+                expression: targetBlock.tree(),
+              });
+            } else {
+              actualParameters.push({
+                identifier: unformalize(input.name),
+                mode: 'action',
+                expression: slurpBlock(targetBlock),
+              });
+            }
           } else {
             throw new ParseException(this, 'I am missing my \'' + unformalize(input.name) + '\' parameter.');
           }
@@ -1035,6 +1250,21 @@ var blockDefinitions = {
     tree: function() {
       var bodyBlock = this.getInputTargetBlock('body');
       return new StatementRepeat(slurpBlock(bodyBlock));
+    }
+  },
+  slur: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'slur %1',
+      args0: [
+        { type: 'input_statement', name: 'body' },
+      ]
+    },
+    tree: function() {
+      var bodyBlock = this.getInputTargetBlock('body');
+      return new StatementSlur(slurpBlock(bodyBlock));
     }
   },
   chord: {
@@ -1091,6 +1321,39 @@ var blockDefinitions = {
     },
     tree: function() {
       return new StatementReroot();
+    }
+  },
+  mark: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'mark',
+    },
+    tree: function() {
+      return new StatementMark();
+    }
+  },
+  back: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'back',
+    },
+    tree: function() {
+      return new StatementBack();
+    }
+  },
+  unmark: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'unmark',
+    },
+    tree: function() {
+      return new StatementUnmark();
     }
   },
   ditto: {
@@ -1310,10 +1573,10 @@ function syncCallToTo(toBlock, callBlock) {
 function syncCallsToTo(root, toBlock) {
   if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
     syncCallToTo(toBlock, root);
-  } else {
-    for (var child of root.getChildren()) {
-      syncCallsToTo(child, toBlock);
-    }
+  }
+
+  for (var child of root.getChildren()) {
+    syncCallsToTo(child, toBlock);
   }
 }
 
@@ -1676,6 +1939,7 @@ function setup() {
   }
 
   $('#score').alphaTab({
+    width: -1,
     staves: 'score',
     displayTranspositionPitches: [12],
     layout: {
@@ -1780,7 +2044,12 @@ function registerResizeListener(bounds, gap, resize) {
       unlistener();
     } else {
       resize(event, bounds, gap);
+
+      // Force Blockly to update.
       Blockly.svgResize(workspace);
+
+      // Force AlphaTab to update.
+      window.dispatchEvent(new Event('resize'));
     }
   }
   document.addEventListener('mousemove', moveListener, false);
@@ -1868,10 +2137,10 @@ function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
     var input = root.getInput(formalize(oldIdentifier));
     input.name = newIdentifier;
     syncCallToTo(toBlock, root);
-  } else {
-    for (var child of root.getChildren()) {
-      renameActuals(child, toBlock, oldIdentifier, newIdentifier);
-    }
+  }
+
+  for (var child of root.getChildren()) {
+    renameActuals(child, toBlock, oldIdentifier, newIdentifier);
   }
 }
 
@@ -1879,10 +2148,10 @@ function renameParameterReferences(root, formalBlockId, newIdentifier) {
   if (root.type == 'parameterReference' && root.deltaphone.formalBlockId == formalBlockId) {
     root.getField('identifier').setText(newIdentifier);
     root.deltaphone.identifier = newIdentifier;
-  } else {
-    for (var child of root.getChildren()) {
-      renameParameterReferences(child, formalBlockId, newIdentifier);
-    }
+  }
+
+  for (var child of root.getChildren()) {
+    renameParameterReferences(child, formalBlockId, newIdentifier);
   }
 }
 
@@ -1931,8 +2200,24 @@ function interpret() {
       beatsPerMeasure: 4,
       beatNote: 4,
       bindings: {},
+      marks: [],
+      sequences: [],
+      isSlur: false,
+      push: function(item) {
+        this.sequences.push(item);
+      },
+      pop: function(item) {
+        return this.sequences.pop(item);
+      },
+      emit: function(item) {
+        return this.sequences[this.sequences.length - 1].push(item);
+      },
     };
     program.evaluate(env);
+    var xml = env.sequences[0].toXML(env);
+    console.log("xml:", xml);
+    // console.log("env.sequences:", env.sequences);
+    $('#scratch').val(xml);
     render();
   } catch (e) {
     lastWarnedBlock = e.block;
@@ -1940,7 +2225,7 @@ function interpret() {
       e.block.select();
       e.block.setWarningText(e.message);
     } else {
-      console.log(e);
+      console.error(e);
     }
   }
 }
