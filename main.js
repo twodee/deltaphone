@@ -574,6 +574,24 @@ function StatementProgram(block) {
   }
 }
 
+function StatementGet(identifier) {
+  this.identifier = identifier;
+  this.evaluate = function(env) {
+    return env.bindings[identifier].value;
+  }
+}
+
+function StatementSet(identifier, value) {
+  this.identifier = identifier;
+  this.value = value;
+  this.evaluate = function(env) {
+    env.bindings[identifier] = {
+      identifier: this.identifier,
+      value: this.value,
+    };
+  }
+}
+
 function StatementTo(identifier, parameters, body) {
   this.identifier = identifier;
   this.parameters = parameters;
@@ -1128,8 +1146,8 @@ var blockDefinitions = {
       colour: parameterColor,
       output: null,
       inputsInline: true,
-      extensions: ['formalParameterOptions'],
-      mutator: 'configureFormal',
+      extensions: ['extendFormal'],
+      mutator: 'formalMutator',
       message0: '%1 %2',
       args0: [
         { type: 'field_input', name: 'identifier', text: '' },
@@ -1146,7 +1164,7 @@ var blockDefinitions = {
       output: null,
       inputsInline: true,
       message0: '%1',
-      mutator: 'configureParameterReference',
+      mutator: 'parameterReferenceMutator',
       args0: [
         { type: 'field_label', name: 'identifier', text: '' },
       ]
@@ -1169,8 +1187,8 @@ var blockDefinitions = {
       message0: '',
       args0: [],
       inputsInline: false,
-      mutator: 'configureCall',
-      extensions: ['callOptions'],
+      mutator: 'callMutator',
+      extensions: ['extendCall'],
     },
     deltaphone: {
       identifier: null,
@@ -1205,6 +1223,46 @@ var blockDefinitions = {
       return new StatementCall(identifier, actualParameters);
     }
   },
+  get: {
+    configuration: {
+      colour: expressionColor,
+      output: null,
+      message0: '',
+      args0: [],
+      inputsInline: false,
+      mutator: 'getMutator',
+    },
+    deltaphone: {
+      identifier: null,
+      setBlockId: null,
+    },
+    tree: function() {
+      var identifier = this.deltaphone.identifier;
+      return new StatementGet(identifier);
+    }
+  },
+  set: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'set %1 %2',
+      args0: [
+        { type: 'field_input', name: 'identifier', text: '' },
+        { type: 'input_value', align: 'RIGHT', name: 'value' },
+      ],
+      // mutator: 'toMutator',
+      extensions: ['extendSet'],
+      inputsInline: false,
+    },
+    deltaphone: {
+    },
+    tree: function() {
+      var identifier = this.getField('identifier').getText();
+      var value = this.getInputTargetBlock('value');
+      return new StatementSet(identifier, value.tree());
+    }
+  },
   to: {
     configuration: {
       colour: statementColor,
@@ -1218,7 +1276,7 @@ var blockDefinitions = {
       args1: [
         { type: 'input_statement', name: 'body' },
       ],
-      mutator: 'setParameters',
+      mutator: 'toMutator',
       extensions: ['parameterize'],
       inputsInline: true,
     },
@@ -1277,8 +1335,8 @@ var blockDefinitions = {
         { type: 'input_value', align: 'RIGHT', name: 'element1', check: ['Delta', 'Position'] },
         { type: 'input_value', align: 'RIGHT', name: 'element2', check: ['Delta', 'Position'] },
       ],
-      mutator: 'setArity',
-      extensions: ['addArityMenuItem'],
+      mutator: 'arityMutator',
+      extensions: ['extendArity'],
     },
     deltaphone: {
       arity: 3,
@@ -1439,6 +1497,50 @@ function removeCalls(root, toBlockId) {
   }
 }
 
+// Variables ------------------------------------------------------------------
+
+function spawnGet(setBlock) {
+  var getBlock = workspace.newBlock('get');
+  shapeGetFromSet(setBlock, getBlock);
+  getBlock.initSvg();
+  getBlock.render();
+  getBlock.select();
+}
+
+function shapeGetFromSet(setBlock, getBlock) {
+  var identifier = setBlock.getField('identifier').getText();
+  shapeGet(getBlock, setBlock.id, identifier);
+}
+
+function shapeGet(getBlock, setBlockId, identifier) {
+  getBlock.deltaphone.identifier = identifier;
+  getBlock.deltaphone.setBlockId = setBlockId;
+  var input = getBlock.appendDummyInput();
+  input.appendField(identifier);
+}
+
+function renameSet(setBlock, oldIdentifier, newIdentifier) {
+  for (var root of workspace.getTopBlocks()) {
+    syncGetsToSet(root, setBlock);
+  }
+}
+
+function syncGetsToSet(root, setBlock) {
+  if (root.type == 'set' && root.deltaphone.setBlockId == setBlock.id) {
+    setGetToSet(setBlock, root);
+  }
+
+  for (var child of root.getChildren()) {
+    syncGetsToSet(child, setBlock);
+  }
+}
+
+function syncGetToSet(setBlock, getBlock) {
+  shapeGetFromSet(setBlock, getBlock);
+}
+
+// Calls ----------------------------------------------------------------------
+
 function spawnCall(toBlock, mode) {
   var callBlock = workspace.newBlock('call');
   callBlock.deltaphone.mode = mode;
@@ -1446,11 +1548,6 @@ function spawnCall(toBlock, mode) {
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
-}
-
-function shapeCallFromTo(toBlock, callBlock) {
-  var identifier = toBlock.getField('identifier').getText();
-  shapeCall(callBlock, toBlock.id, identifier, toBlock.deltaphone.parameters);
 }
 
 function shapeCall(callBlock, toBlockId, identifier, parameters) {
@@ -1582,7 +1679,6 @@ function syncCallsToTo(root, toBlock) {
 
 function syncModeArrow(block) {
   var arrow = block.deltaphone.mode == 'action' ? '\u2193' : '\u2190';
-  // var arrow = '\uFF0B';
   block.getField('modeArrow').setText(arrow);
 }
 
@@ -1600,6 +1696,8 @@ function syncMode(block) {
   }
 }
 
+// ----------------------------------------------------------------------------
+
 function setup() {
   // Initialize blocks.
   for (var id in blockDefinitions) {
@@ -1608,7 +1706,7 @@ function setup() {
     }
   }
 
-  Blockly.Extensions.register('callOptions', function() {
+  Blockly.Extensions.register('extendCall', function() {
     var block = this;
     this.mixin({
       customContextMenu: function(options) {
@@ -1625,7 +1723,7 @@ function setup() {
     });
   });
 
-  Blockly.Extensions.register('formalParameterOptions', function() {
+  Blockly.Extensions.register('extendFormal', function() {
     var block = this;
     this.mixin({
       customContextMenu: function(options) {
@@ -1640,6 +1738,32 @@ function setup() {
       }
     });
   });
+
+  Blockly.Extensions.register('extendSet', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        var option = {
+          enabled: true,
+          text: 'Spawn getter',
+          callback: function() {
+            spawnGet(block);
+          }
+        };
+        options.push(option);
+
+        var option = {
+          enabled: true,
+          text: 'Delete variable and getters',
+          callback: function() {
+            deleteSet(block);
+          }
+        };
+        options.push(option);
+      }
+    });
+  });
+
 
   Blockly.Extensions.register('parameterize', function() {
     var block = this;
@@ -1693,7 +1817,7 @@ function setup() {
     });
   });
 
-  Blockly.Extensions.register('addArityMenuItem', function() {
+  Blockly.Extensions.register('extendArity', function() {
     var block = this;
     this.mixin({
       customContextMenu: function(options) {
@@ -1712,7 +1836,7 @@ function setup() {
     });
   });
 
-  Blockly.Extensions.registerMutator('setParameters', {
+  Blockly.Extensions.registerMutator('toMutator', {
     mutationToDom: function() {
       var parametersNode = document.createElement('parameters');
 
@@ -1770,7 +1894,38 @@ function setup() {
     },
   });
 
-  Blockly.Extensions.registerMutator('configureCall', {
+  Blockly.Extensions.registerMutator('getMutator', {
+    mutationToDom: function() {
+      var setBlock = workspace.getBlockById(this.deltaphone.setBlockId);
+      if (!setBlock) {
+        return;
+      }
+
+      var container = document.createElement('mutation');
+
+      var setElement = document.createElement('set');
+      setElement.setAttribute('id', setBlock.id);
+      setElement.setAttribute('identifier', setBlock.getField('identifier').getText());
+      container.appendChild(setElement);
+
+      return container;
+    },
+    domToMutation: function(xml) {
+      var setBlockId = null;
+      var setIdentifier = null;
+
+      for (var child of xml.children) {
+        if (child.nodeName.toLowerCase() == 'set') {
+          setBlockId = child.getAttribute('id');
+          setIdentifier = child.getAttribute('identifier');
+        }
+      }
+
+      shapeGet(this, setBlockId, setIdentifier);
+    }
+  });
+
+  Blockly.Extensions.registerMutator('callMutator', {
     mutationToDom: function() {
       var toBlock = workspace.getBlockById(this.deltaphone.toBlockId);
       if (!toBlock) {
@@ -1821,7 +1976,7 @@ function setup() {
     }
   });
 
-  Blockly.Extensions.registerMutator('configureFormal', {
+  Blockly.Extensions.registerMutator('formalMutator', {
     mutationToDom: function() {
       var container = document.createElement('mutation');
       container.setAttribute('mode', this.deltaphone.mode);
@@ -1833,7 +1988,7 @@ function setup() {
     }
   });
 
-  Blockly.Extensions.registerMutator('configureParameterReference', {
+  Blockly.Extensions.registerMutator('parameterReferenceMutator', {
     mutationToDom: function() {
       var container = document.createElement('mutation');
       container.setAttribute('mode', this.deltaphone.mode);
@@ -1850,7 +2005,7 @@ function setup() {
     }
   });
 
-  Blockly.Extensions.registerMutator('setArity', {
+  Blockly.Extensions.registerMutator('arityMutator', {
     mutationToDom: function() {
       var container = document.createElement('mutation');
       container.setAttribute('arity', this.deltaphone.arity);
@@ -1958,6 +2113,8 @@ function setup() {
         renameFormal(block, event.oldValue, event.newValue);
       } else if (block.type == 'to') {
         renameTo(block, event.oldValue, event.newValue);
+      } else if (block.type == 'set') {
+        renameSet(block, event.oldValue, event.newValue);
       }
     }
 
