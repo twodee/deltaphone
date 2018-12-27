@@ -311,6 +311,16 @@ function Repeat() {
   };
 }
 
+function Chord(notes) {
+  this.notes = notes;
+  for (var note of notes.slice(1)) {
+    note.isChord = true;
+  }
+  this.toXML = function(env) {
+    return this.notes.map(note => note.toXML(env)).join('\n');
+  }
+}
+
 function Note(id, duration) {
   this.id = id;
   this.duration = duration;
@@ -321,11 +331,13 @@ function Note(id, duration) {
   this.toXML = function(env) {
     var xml = '';
 
-    if (env.beats == env.beatsPerMeasure) {
-      xml += breakMeasure(env);
-      env.beats = 0;
+    if (!this.isChord) {
+      if (env.beats == env.beatsPerMeasure) {
+        xml += breakMeasure(env);
+        env.beats = 0;
+      }
+      env.beats += 4 / this.duration;
     }
-    env.beats += 4 / this.duration;
 
     var alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
     var alpha = alphas[id % 12];
@@ -386,6 +398,24 @@ function Rest(duration) {
   };
 }
 
+class ExpressionBoolean {
+  constructor(value) {
+    this.value = value;
+  }
+
+  evaluate(env) {
+    return this;
+  }
+
+  toInteger() {
+    return this.value ? 1 : 0;
+  }
+
+  toString() {
+    return '' + this.value;
+  }
+}
+
 function ExpressionInteger(value) {
   this.value = value;
   this.evaluate = function(env) {
@@ -442,10 +472,156 @@ function ExpressionDelta(deltaValue, deltaUnit) {
 function ExpressionScale(value) {
   this.value = value;
   this.evaluate = function(env) {
-    console.log("value:", value);
     return this.value;
   }
 }
+
+class ExpressionAdd {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionInteger(valueA + valueB);
+  }
+}
+
+class ExpressionSubtract {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionInteger(valueA - valueB);
+  }
+}
+
+class ExpressionMultiply {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionInteger(valueA * valueB);
+  }
+}
+
+class ExpressionDivide {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionInteger(Math.floor(valueA / valueB));
+  }
+}
+
+class ExpressionRemainder {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionInteger(valueA % valueB);
+  }
+}
+
+// Logic ----------------------------------------------------------------------
+
+class ExpressionLess {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionBoolean(valueA < valueB);
+  }
+}
+
+class ExpressionLessEqual {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionBoolean(valueA <= valueB);
+  }
+}
+
+class ExpressionMore {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionBoolean(valueA > valueB);
+  }
+}
+
+class ExpressionMoreEqual {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionBoolean(valueA >= valueB);
+  }
+}
+
+class ExpressionEqual {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionBoolean(valueA == valueB);
+  }
+}
+
+class ExpressionNotEqual {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionBoolean(valueA != valueB);
+  }
+}
+
+// ----------------------------------------------------------------------------
 
 function ExpressionRandom(min, max) {
   this.min = min;
@@ -789,6 +965,107 @@ var blockDefinitions = {
       return new ExpressionInteger(parseInt(this.getFieldValue('value')));
     }
   },
+  logic2: {
+    configuration: {
+      colour: expressionColor,
+      output: ['Integer', 'Real'],
+      inputsInline: true,
+      message0: '%1 %2 %3',
+      args0: [
+        {
+          type: 'input_value',
+          name: 'a',
+          check: ['Integer', 'Real', 'Boolean'],
+        },
+        {
+          type: 'field_dropdown',
+          name: 'operator',
+          options: [
+            ['>', '>'],
+            ['>=', '>='],
+            ['<', '<'],
+            ['<=', '<='],
+            ['equals', '=='],
+            ['doesn\'t equal', '!='],
+          ]
+        },
+        {
+          type: 'input_value',
+          name: 'b',
+          check: ['Integer', 'Real', 'Boolean'],
+        },
+      ]
+    },
+    tree: function() {
+      var operator = this.getFieldValue('operator');
+      var a = this.getInputTargetBlock('a').tree();
+      var b = this.getInputTargetBlock('b').tree();
+      if (operator == '<') {
+        return new ExpressionLess(a, b);
+      } else if (operator == '<=') {
+        return new ExpressionLessEqual(a, b);
+      } else if (operator == '>') {
+        return new ExpressionMore(a, b);
+      } else if (operator == '>=') {
+        return new ExpressionMoreEqual(a, b);
+      } else if (operator == '==') {
+        return new ExpressionEqual(a, b);
+      } else if (operator == '!=') {
+        return new ExpressionNotEqual(a, b);
+      } else {
+        throw 'Bad operator: ' + operator;
+      }
+    }
+  },
+  arithmetic2: {
+    configuration: {
+      colour: expressionColor,
+      output: ['Integer', 'Real'],
+      inputsInline: true,
+      message0: '%1 %2 %3',
+      args0: [
+        {
+          type: 'input_value',
+          name: 'a',
+          check: ['Integer', 'Real'],
+        },
+        {
+          type: 'field_dropdown',
+          name: 'operator',
+          options: [
+            ['+', '+'],
+            ['-', '-'],
+            ['*', '*'],
+            ['/', '/'],
+            ['%', '%'],
+          ]
+        },
+        {
+          type: 'input_value',
+          name: 'b',
+          check: ['Integer', 'Real'],
+        },
+      ]
+    },
+    tree: function() {
+      var operator = this.getFieldValue('operator');
+      var a = this.getInputTargetBlock('a').tree();
+      var b = this.getInputTargetBlock('b').tree();
+      if (operator == '+') {
+        return new ExpressionAdd(a, b);
+      } else if (operator == '-') {
+        return new ExpressionSubtract(a, b);
+      } else if (operator == '*') {
+        return new ExpressionMultiply(a, b);
+      } else if (operator == '/') {
+        return new ExpressionDivide(a, b);
+      } else if (operator == '%') {
+        return new ExpressionRemainder(a, b);
+      } else {
+        throw 'Bad operator: ' + operator;
+      }
+    }
+  },
   delta: {
     configuration: {
       colour: expressionColor,
@@ -822,6 +1099,19 @@ var blockDefinitions = {
       var accidental = this.getInputTargetBlock('accidental').tree();
       var octave = this.getInputTargetBlock('octave').tree();
       return new ExpressionPosition(letter, accidental, octave);
+    }
+  },
+  truefalse: {
+    configuration: {
+      colour: expressionColor,
+      output: 'Integer',
+      message0: '%1',
+      args0: [
+        { type: 'field_dropdown', name: 'value', options: [['true', 'true'], ['false', 'false']] },
+      ]
+    },
+    tree: function() {
+      return new ExpressionBoolean(this.getFieldValue('value') == 'true' ? true : false);
     }
   },
   deltaValue: {
@@ -1548,6 +1838,11 @@ function spawnCall(toBlock, mode) {
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
+}
+
+function shapeCallFromTo(toBlock, callBlock) {
+  var identifier = toBlock.getField('identifier').getText();
+  shapeCall(callBlock, toBlock.id, identifier, toBlock.deltaphone.parameters);
 }
 
 function shapeCall(callBlock, toBlockId, identifier, parameters) {
