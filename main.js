@@ -411,20 +411,33 @@ class ExpressionBoolean {
     return this.value ? 1 : 0;
   }
 
+  toBoolean() {
+    return this.value;
+  }
+
   toString() {
     return '' + this.value;
   }
 }
 
-function ExpressionInteger(value) {
-  this.value = value;
-  this.evaluate = function(env) {
+class ExpressionInteger {
+  constructor(value) {
+    this.value = value;
+  }
+
+  evaluate(env) {
     return this;
   }
-  this.toInteger = function() {
+
+  toInteger() {
     return this.value;
   }
-  this.toString = function() {
+
+  toBoolean() {
+    return this.value == 0 ? false : true;
+  }
+
+  toString() {
     return '' + this.value;
   }
 }
@@ -806,6 +819,27 @@ function StatementCall(identifier, actualParameters) {
     var result = body.evaluate(env);
     // env.bindings = oldBindings;
     return result;
+  }
+}
+
+class StatementIf {
+  constructor(conditions, thenBodies, elseBody) {
+    this.conditions = conditions;
+    this.thenBodies = thenBodies;
+    this.elseBody = elseBody;
+  }
+
+  evaluate(env) {
+    for (let [i, condition] of this.conditions.entries()) {
+      if (condition.evaluate(env).toBoolean()) {
+        this.thenBodies[i].evaluate(env);
+        return;
+      }
+    }
+
+    if (this.elseBody) {
+      this.elseBody.evaluate(env);
+    }
   }
 }
 
@@ -1585,6 +1619,40 @@ var blockDefinitions = {
       return new StatementTo(identifier, parameters, slurpBlock(bodyBlock));
     }
   },
+  multif: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'if %1 %2',
+      mutator: 'ifMutator',
+      extensions: ['extendIf'],
+      args0: [
+        { type: 'input_value', name: 'condition0' },
+        { type: 'input_statement', name: 'then0' },
+      ]
+    },
+    deltaphone: {
+      arity: 1,
+      hasElse: false,
+    },
+    tree: function() {
+      let conditions = [];
+      let thenBodies = [];
+      for (let i = 0; i < this.deltaphone.arity; ++i) {
+        conditions.push(this.getInputTargetBlock('condition' + i).tree());
+        thenBodies.push(slurpBlock(this.getInputTargetBlock('then' + i)));
+      }
+
+      let elseBody = null;
+      if (this.deltaphone.hasElse) {
+        elseBody = slurpBlock(this.getInputTargetBlock('else'));
+      }
+
+      return new StatementIf(conditions, thenBodies, elseBody);
+    }
+  },
   repeat: {
     configuration: {
       colour: statementColor,
@@ -1753,12 +1821,17 @@ function initializeBlock(id) {
 }
 
 function mutateUndoably(block, mutate, callback = null) {
+  Blockly.Events.disable();
   var oldMutation = block.mutationToDom();
   mutate();
   var newMutation = block.mutationToDom();
+
   block.domToMutation(newMutation);
+  Blockly.Events.enable();
+
   var event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
   Blockly.Events.fire(event);
+
   if (callback) {
     callback();
   }
@@ -1991,6 +2064,76 @@ function syncMode(block) {
   }
 }
 
+// If -------------------------------------------------------------------------
+
+function addThen(block) {
+  mutateUndoably(block, () => {
+    block.deltaphone.arity += 1;
+  });
+}
+
+function removeThen(block) {
+  mutateUndoably(block, () => {
+    block.deltaphone.arity -= 1;
+  });
+}
+
+function addElse(block) {
+  mutateUndoably(block, () => {
+    block.deltaphone.hasElse = true;
+  });
+}
+
+function removeElse(block) {
+  mutateUndoably(block, () => {
+    block.deltaphone.hasElse = false;
+  });
+}
+
+function shapeIf(block) {
+  // Cache old inputs to be reconnected later.
+  var oldInputs = {};
+  for (var input of block.inputList) {
+    oldInputs[input.name] = input.connection.targetBlock();
+  }
+
+  // Remove all inputs but first then block.
+  while (block.inputList.length > 2) {
+    let input = block.inputList[block.inputList.length - 1];
+    block.removeInput(input.name);
+  }
+
+  for (let i = 1; i < block.deltaphone.arity; ++i) {
+    let input = block.appendValueInput('condition' + i).appendField('else if');
+    if (oldInputs.hasOwnProperty('condition' + i) && oldInputs['condition' + i]) {
+      input.connection.connect(oldInputs['condition' + i].outputConnection);
+    }
+
+    input = block.appendStatementInput('then' + i);
+    if (oldInputs.hasOwnProperty('then' + i) && oldInputs['then' + i]) {
+      input.connection.connect(oldInputs['then' + i].previousConnection);
+    }
+  }
+
+  if (block.deltaphone.hasElse) {
+    let input = block.appendStatementInput('else').appendField('else');
+    if (oldInputs.hasOwnProperty('else') && oldInputs['else']) {
+      input.connection.connect(oldInputs['else'].previousConnection);
+    }
+  }
+}
+
+function addSeparator(options) {
+  var option = {
+    enabled: false,
+    text: '',
+  };
+
+  for (let i = 0; i < 2; ++i) {
+    options.push(option);
+  }
+}
+
 // ----------------------------------------------------------------------------
 
 function setup() {
@@ -2014,6 +2157,57 @@ function setup() {
           }
         };
         options.push(option);
+      }
+    });
+  });
+
+  Blockly.Extensions.register('extendIf', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        addSeparator(options);
+
+        var option = {
+          enabled: true,
+          text: 'Add then',
+          callback: function() {
+            addThen(block);
+          }
+        };
+        options.push(option);
+
+        if (block.deltaphone.arity > 1) {
+          var option = {
+            enabled: true,
+            text: 'Remove last then',
+            callback: function() {
+              removeThen(block);
+            }
+          };
+          options.push(option);
+        }
+
+        addSeparator(options);
+
+        if (this.deltaphone.hasElse) {
+          var option = {
+            enabled: true,
+            text: 'Remove else',
+            callback: function() {
+              removeElse(block);
+            }
+          };
+          options.push(option);
+        } else {
+          var option = {
+            enabled: true,
+            text: 'Add else',
+            callback: function() {
+              addElse(block);
+            }
+          };
+          options.push(option);
+        }
       }
     });
   });
@@ -2187,6 +2381,20 @@ function setup() {
         }
       }
     },
+  });
+
+  Blockly.Extensions.registerMutator('ifMutator', {
+    mutationToDom: function() {
+      var container = document.createElement('mutation');
+      container.setAttribute('arity', this.deltaphone.arity);
+      container.setAttribute('else', this.deltaphone.hasElse);
+      return container;
+    },
+    domToMutation: function(xml) {
+      this.deltaphone.arity = parseInt(xml.getAttribute('arity'));
+      this.deltaphone.hasElse = xml.getAttribute('else') == 'true';
+      shapeIf(this);
+    }
   });
 
   Blockly.Extensions.registerMutator('getMutator', {
@@ -2667,8 +2875,7 @@ function interpret() {
     };
     program.evaluate(env);
     var xml = env.sequences[0].toXML(env);
-    console.log("xml:", xml);
-    // console.log("env.sequences:", env.sequences);
+    // console.log("xml:", xml);
     $('#scratch').val(xml);
     render();
   } catch (e) {
