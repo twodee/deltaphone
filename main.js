@@ -662,7 +662,7 @@ function ExpressionReal(value) {
 function ExpressionChord(notes) {
   this.notes = notes;
   this.evaluate = function(env) {
-    var ids = this.notes.map(note => note.evaluate(env));
+    var ids = this.notes.map(note => note.evaluate(env).toInteger());
     if (ids.length > 0) {
       env.halfstep = ids[0];
     }
@@ -2552,6 +2552,7 @@ function setup() {
     toolbox: document.getElementById('toolbox'),
     trashcan: true,
     comments: false,
+    media: 'blockly/media/',
     zoom: {
       controls: true,
       wheel: true,
@@ -2581,11 +2582,11 @@ function setup() {
     options.push(option);
   };
 
-  $('#playButton').click(() => {
+  document.getElementById('playButton').addEventListener('click', () => {
     $('#score').alphaTab('playPause');
   });
 
-  $('#scorifyButton').click(() => {
+  document.getElementById('scorifyButton').addEventListener('click', () => {
     interpret();
   });
 
@@ -2596,18 +2597,18 @@ function setup() {
     Blockly.Xml.domToWorkspace(last, workspace);
   }
 
-  $('#score').alphaTab({
-    width: -1,
-    staves: 'score',
-    displayTranspositionPitches: [12],
-    layout: {
-      mode: 'page',
-      additionalSettings: {
-        hideTuning: true,
-        hideTrackNames: true
-      }
-    }
-  });
+  // $('#score').alphaTab({
+    // width: -1,
+    // staves: 'score',
+    // displayTranspositionPitches: [12],
+    // layout: {
+      // mode: 'page',
+      // additionalSettings: {
+        // hideTuning: true,
+        // hideTrackNames: true
+      // }
+    // }
+  // });
 
   workspace.addChangeListener(event => {
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
@@ -2815,8 +2816,6 @@ function renameParameterReferences(root, formalBlockId, newIdentifier) {
   }
 }
 
-$(document).ready(setup);
-
 function saveLocal() {
   var xml = Blockly.Xml.workspaceToDom(workspace);
   xml = Blockly.Xml.domToPrettyText(xml);
@@ -2874,9 +2873,10 @@ function interpret() {
       },
     };
     program.evaluate(env);
+    console.log("env.sequences:", env.sequences);
     var xml = env.sequences[0].toXML(env);
     // console.log("xml:", xml);
-    $('#scratch').val(xml);
+    document.getElementById('scratch').value = xml;
     render();
   } catch (e) {
     lastWarnedBlock = e.block;
@@ -2892,10 +2892,10 @@ function interpret() {
 var lastWarnedBlock = null;
 
 function render() {
-  var musicXML = $('#scratch').val();
+  var musicXML = document.getElementById('scratch').value;
   if (musicXML.length > 0) {
     musicXML = new TextEncoder().encode(musicXML);
-    $('#score').alphaTab('load', musicXML);
+    // $('#score').alphaTab('load', musicXML);
   }
   // $('#score').alphaTab('load', 'foo.xml');
 }
@@ -2928,3 +2928,5 @@ function pasteWorkspace() {
       console.log('error:', error);
     });
 }
+
+window.addEventListener('load', setup);
