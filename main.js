@@ -554,6 +554,19 @@ class ExpressionRemainder {
   }
 }
 
+class ExpressionPower {
+  constructor(a, b) {
+    this.a = a;
+    this.b = b;
+  }
+
+  evaluate(env) {
+    var valueA = this.a.evaluate(env).toInteger();
+    var valueB = this.b.evaluate(env).toInteger();
+    return new ExpressionInteger(Math.pow(valueA, valueB));
+  }
+}
+
 // Logic ----------------------------------------------------------------------
 
 class ExpressionLess {
@@ -822,6 +835,32 @@ function StatementCall(identifier, actualParameters) {
   }
 }
 
+class StatementForRange {
+  constructor(identifier, lo, hi, isInclusive, body) {
+    this.identifier = identifier;
+    this.lo = lo;
+    this.hi = hi;
+    this.isInclusive = isInclusive;
+    this.body = body;
+  }
+
+  evaluate(env) {
+    let start = this.lo.evaluate(env).toInteger();
+    let stop = this.hi.evaluate(env).toInteger();
+    if (!this.isInclusive) {
+      stop -= 1;
+    }
+
+    for (let i = start; i <= stop; ++i) {
+      env.bindings[this.identifier] = {
+        identifier: this.identifier,
+        value: new ExpressionInteger(i),
+      };
+      this.body.evaluate(env);
+    }
+  }
+}
+
 class StatementIf {
   constructor(conditions, thenBodies, elseBody) {
     this.conditions = conditions;
@@ -898,7 +937,8 @@ function StatementRepeat12(common, first, second) {
 function StatementJump(note) {
   this.note = note;
   this.evaluate = function(env) {
-    this.note.evaluate(env);
+    // console.log(this.note.evaluate(env));
+    env.halfstep = this.note.evaluate(env).toInteger();
   }
 }
 
@@ -1072,6 +1112,7 @@ var blockDefinitions = {
             ['*', '*'],
             ['/', '/'],
             ['%', '%'],
+            ['^', '^'],
           ]
         },
         {
@@ -1095,6 +1136,8 @@ var blockDefinitions = {
         return new ExpressionDivide(a, b);
       } else if (operator == '%') {
         return new ExpressionRemainder(a, b);
+      } else if (operator == '^') {
+        return new ExpressionPower(a, b);
       } else {
         throw 'Bad operator: ' + operator;
       }
@@ -1563,6 +1606,33 @@ var blockDefinitions = {
     tree: function() {
       var identifier = this.deltaphone.identifier;
       return new StatementGet(identifier);
+    }
+  },
+  forRange: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'for %1 from %2 %3 %4 %5',
+      args0: [
+        { type: 'field_input', name: 'identifier', text: 'i' },
+        { type: 'input_value', align: 'RIGHT', name: 'lo', check: ['Integer', 'Position'] },
+        { type: 'field_dropdown', name: 'inclusivity', options: [['to', 'to'], ['through', 'through']] },
+        { type: 'input_value', align: 'RIGHT', name: 'hi', check: ['Integer', 'Position'] },
+        { type: 'input_statement', align: 'RIGHT', name: 'body' },
+      ],
+      extensions: ['extendForRange'],
+      inputsInline: false,
+    },
+    deltaphone: {
+    },
+    tree: function() {
+      var identifier = this.getField('identifier').getText();
+      var lo = this.getInputTargetBlock('lo');
+      var hi = this.getInputTargetBlock('hi');
+      var isInclusive = this.getFieldValue('inclusivity') == 'through';
+      var body = slurpBlock(this.getInputTargetBlock('body'));
+      return new StatementForRange(identifier, lo.tree(), hi.tree(), isInclusive, body);
     }
   },
   set: {
@@ -2228,6 +2298,31 @@ function setup() {
     });
   });
 
+  Blockly.Extensions.register('extendForRange', function() {
+    var block = this;
+    this.mixin({
+      customContextMenu: function(options) {
+        var option = {
+          enabled: true,
+          text: 'Spawn count getter',
+          callback: function() {
+            spawnGet(block);
+          }
+        };
+        options.push(option);
+
+        var option = {
+          enabled: true,
+          text: 'Delete loop and getters',
+          callback: function() {
+            deleteSet(block);
+          }
+        };
+        options.push(option);
+      }
+    });
+  });
+
   Blockly.Extensions.register('extendSet', function() {
     var block = this;
     this.mixin({
@@ -2597,18 +2692,18 @@ function setup() {
     Blockly.Xml.domToWorkspace(last, workspace);
   }
 
-  // $('#score').alphaTab({
-    // width: -1,
-    // staves: 'score',
-    // displayTranspositionPitches: [12],
-    // layout: {
-      // mode: 'page',
-      // additionalSettings: {
-        // hideTuning: true,
-        // hideTrackNames: true
-      // }
-    // }
-  // });
+  $('#score').alphaTab({
+    width: -1,
+    staves: 'score',
+    displayTranspositionPitches: [12],
+    layout: {
+      mode: 'page',
+      additionalSettings: {
+        hideTuning: true,
+        hideTrackNames: true
+      }
+    }
+  });
 
   workspace.addChangeListener(event => {
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
@@ -2895,9 +2990,8 @@ function render() {
   var musicXML = document.getElementById('scratch').value;
   if (musicXML.length > 0) {
     musicXML = new TextEncoder().encode(musicXML);
-    // $('#score').alphaTab('load', musicXML);
+    $('#score').alphaTab('load', musicXML);
   }
-  // $('#score').alphaTab('load', 'foo.xml');
 }
 
 function workspaceToXml() {
