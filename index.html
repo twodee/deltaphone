@@ -132,7 +132,13 @@
     <block type="mark"></block>
     <block type="back"></block>
     <block type="unmark"></block>
-    <block type="set"></block>
+    <block type="set">
+      <value name="identifier">
+        <block type="setIdentifier">
+          <field name="identifier"></field>
+        </block>
+      </value>
+    </block>
   </category>
   <category name="Values">
     <block type="integer"></block>
@@ -182,6 +188,11 @@
       </value>
     </block>
     <block type="forRange">
+      <value name="identifier">
+        <block type="setIdentifier">
+          <field name="identifier">i</field>
+        </block>
+      </value>
       <value name="lo">
         <block type="integer">
           <field name="value">0</field>
@@ -205,13 +216,7 @@
         </block>
       </value>
     </block>
-    <block type="jump">
-      <value name="delta">
-        <block type="offset">
-          <field name="value">+1</field>
-        </block>
-      </value>
-    </block>
+    <block type="jump"></block>
     <block type="position">
       <value name="letter">
         <block type="letter">
