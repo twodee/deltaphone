@@ -3,24 +3,7 @@ let workspace = null;
 let expressionColor = 270;
 let statementColor = 180;
 let parameterColor = 330;
-
-function ParseException(block, message) {
-  this.block = block;
-  this.message = message;
-}
-
-ParseException.prototype = Object.create(Error.prototype);
-ParseException.prototype.name = "ParseException";
-ParseException.prototype.constructor = ParseException;
-
-function RuntimeException(block, message) {
-  this.block = block;
-  this.message = message;
-}
-
-RuntimeException.prototype = Object.create(Error.prototype);
-RuntimeException.prototype.name = "RuntimeException";
-RuntimeException.prototype.constructor = RuntimeException;
+let lastWarnedBlock = null;
 
 let letters = [
   ['C', '0'],
@@ -110,9 +93,12 @@ let deltas = [
   ['-12', '-12'],
 ];
 
-function Song() {
-  this.items = [];
-  this.toXML = function(env) {
+class Song {
+  constructor() {
+    this.items = [];
+  }
+
+  toXML(env) {
     let xml = '';
     xml  = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
     xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
@@ -148,15 +134,19 @@ function Song() {
     xml += '</score-partwise>\n';
 
     return xml;
-  };
-  this.push = function(item) {
+  }
+
+  push(item) {
     this.items.push(item);
-  };
+  }
 }
 
-function Sequence() {
-  this.items = [];
-  this.toXML = function(env) {
+class Sequence {
+  constructor() {
+    this.items = [];
+  }
+
+  toXML(env) {
     let xml = '';
 
     if (env.beats == env.beatsPerMeasure) {
@@ -169,19 +159,22 @@ function Sequence() {
     }
 
     return xml;
-  };
-  this.push = function(item) {
+  }
+
+  push(item) {
     this.items.push(item);
-  };
-  this.markFirstNote = function(item) {
+  }
+
+  markFirstNote(item) {
     for (let item of this.items) {
       if (item.markFirstNote()) {
         return true;
       }
     }
     return false;
-  };
-  this.markLastNote = function(item) {
+  }
+
+  markLastNote(item) {
     for (let i = this.items.length - 1; i >= 0; --i) {
       let item = this.items[i];
       if (item.markLastNote()) {
@@ -189,17 +182,21 @@ function Sequence() {
       }
     }
     return false;
-  };
-  this.markMiddleNotes = function(item) {
+  }
+
+  markMiddleNotes(item) {
     for (let item of this.items) {
       item.markMiddleNotes();
     }
-  };
+  }
 }
 
-function Slur() {
-  this.items = [];
-  this.toXML = function(env) {
+class Slur {
+  constructor() {
+    this.items = [];
+  }
+
+  toXML(env) {
     let xml = '';
 
     if (env.beats == env.beatsPerMeasure) {
@@ -218,19 +215,22 @@ function Slur() {
     env.isSlur = false;
 
     return xml;
-  };
-  this.push = function(item) {
+  }
+
+  push(item) {
     this.items.push(item);
-  };
-  this.markFirstNote = function(item) {
+  }
+
+  markFirstNote(item) {
     for (let item of this.items) {
       if (item.markFirstNote()) {
         return true;
       }
     }
     return false;
-  };
-  this.markLastNote = function(item) {
+  }
+
+  markLastNote(item) {
     for (let i = this.items.length - 1; i >= 0; --i) {
       let item = this.items[i];
       if (item.markLastNote()) {
@@ -238,17 +238,24 @@ function Slur() {
       }
     }
     return false;
-  };
-  this.markMiddleNotes = function(item) {
+  }
+
+  markMiddleNotes(item) {
     for (let item of this.items) {
       item.markMiddleNotes();
     }
-  };
+  }
 }
 
-function Repeat12(common, first, second) {
-  this.items = [];
-  this.toXML = function(env) {
+class Repeat12 {
+  constructor(common, first, second) {
+    this.items = [];
+    this.common = common;
+    this.first = first;
+    this.second = second;
+  }
+
+  toXML(env) {
     let xml = '';
 
     if (env.beats == env.beatsPerMeasure) {
@@ -261,7 +268,7 @@ function Repeat12(common, first, second) {
     xml += '  <repeat direction="forward"/>\n';
     xml += '</barline>';
 
-    xml += common.toXML(env);
+    xml += this.common.toXML(env);
 
     if (env.beats == env.beatsPerMeasure) {
       xml += breakMeasure(env);
@@ -272,26 +279,29 @@ function Repeat12(common, first, second) {
     xml += '  <ending type="start" number="1"/>\n';
     xml += '</barline>';
 
-    xml += first.toXML(env);
+    xml += this.first.toXML(env);
 
     xml += '<barline location="right">\n';
     xml += '  <bar-style>light-heavy</bar-style>\n';
     xml += '  <repeat direction="backward"/>\n';
     xml += '</barline>';
 
-    xml += second.toXML(env);
+    xml += this.second.toXML(env);
 
     xml += '<barline location="right">\n';
     xml += '  <ending type="discontinue" number="2"/>\n';
     xml += '</barline>';
 
     return xml;
-  };
+  }
 }
 
-function Repeat() {
-  this.items = [];
-  this.toXML = function(env) {
+class Repeat {
+  constructor() {
+    this.items = [];
+  }
+
+  toXML(env) {
     let xml = '';
 
     if (env.beats == env.beatsPerMeasure) {
@@ -314,30 +324,37 @@ function Repeat() {
     xml += '</barline>';
 
     return xml;
-  };
-  this.push = function(item) {
+  }
+
+  push(item) {
     this.items.push(item);
-  };
+  }
 }
 
-function Chord(notes) {
-  this.notes = notes;
-  for (let note of notes.slice(1)) {
-    note.isChord = true;
+class Chord {
+  constructor(notes) {
+    this.notes = notes;
+    for (let note of notes.slice(1)) {
+      note.isChord = true;
+    }
   }
-  this.toXML = function(env) {
+
+  toXML(env) {
     return this.notes.map(note => note.toXML(env)).join('\n');
   }
 }
 
-function Note(id, duration) {
-  this.id = id;
-  this.duration = duration;
-  this.isChord = false;
-  this.isFirstNote = false;
-  this.isLastNote = false;
-  this.isMiddleNote = false;
-  this.toXML = function(env) {
+class Note {
+  constructor(id, duration) {
+    this.id = id;
+    this.duration = duration;
+    this.isChord = false;
+    this.isFirstNote = false;
+    this.isLastNote = false;
+    this.isMiddleNote = false;
+  }
+
+  toXML(env) {
     let xml = '';
 
     if (!this.isChord) {
@@ -349,8 +366,8 @@ function Note(id, duration) {
     }
 
     let alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-    let alpha = alphas[id % 12];
-    let octave = Math.floor(id / 12);
+    let alpha = alphas[this.id % 12];
+    let octave = Math.floor(this.id / 12);
     let alter;
     if (alpha.length > 1) {
       if (alpha[1] == '#') {
@@ -361,7 +378,7 @@ function Note(id, duration) {
     } else {
       alter = 0;
     }
-    xml += '<note><pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(duration) + '</type>';
+    xml += '<note><pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(this.duration) + '</type>';
     if (this.isChord) {
       xml += '<chord/>';
     }
@@ -379,23 +396,29 @@ function Note(id, duration) {
     xml += '</note>\n';
 
     return xml;
-  };
-  this.markFirstNote = function(item) {
+  }
+
+  markFirstNote(item) {
     this.isFirstNote = true;
     return true;
-  };
-  this.markLastNote = function(item) {
+  }
+
+  markLastNote(item) {
     this.isLastNote = true;
     return true;
-  };
-  this.markMiddleNotes = function(item) {
+  }
+
+  markMiddleNotes(item) {
     this.isMiddleNote = !this.isFirstNote && !this.isLastNote;
-  };
+  }
 }
 
-function Rest(duration) {
-  this.duration = duration;
-  this.toXML = function(env) {
+class Rest {
+  constructor(duration) {
+    this.duration = duration;
+  }
+
+  toXML(env) {
     let xml = '';
     if (env.beats == env.beatsPerMeasure) {
       xml += breakMeasure(env);
@@ -404,7 +427,7 @@ function Rest(duration) {
     env.beats += 4 / duration;
     xml += '<note><rest measure="yes"/><duration>' + duration + '</duration></note>\n';
     return xml;
-  };
+  }
 }
 
 class ExpressionBoolean {
@@ -451,20 +474,26 @@ class ExpressionInteger {
   }
 }
 
-function ExpressionPosition(letter, accidental, octave) {
-  this.letter = letter;
-  this.accidental = accidental;
-  this.octave = octave;
-  this.evaluate = function(env) {
+class ExpressionPosition {
+  constructor(letter, accidental, octave) {
+    this.letter = letter;
+    this.accidental = accidental;
+    this.octave = octave;
+  }
+
+  evaluate(env) {
     env.halfstep = 12 * this.octave.evaluate(env).toInteger() + this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
     return new ExpressionInteger(env.halfstep);
   }
 }
 
-function ExpressionDelta(deltaValue, deltaUnit) {
-  this.deltaValue = deltaValue;
-  this.deltaUnit = deltaUnit;
-  this.evaluate = function(env) {
+class ExpressionDelta {
+  constructor(deltaValue, deltaUnit) {
+    this.deltaValue = deltaValue;
+    this.deltaUnit = deltaUnit;
+  }
+
+  evaluate(env) {
     let value = this.deltaValue.evaluate(env).toInteger();
     let jump;
     if (this.deltaUnit.value == 1) {
@@ -491,9 +520,12 @@ function ExpressionDelta(deltaValue, deltaUnit) {
   }
 }
 
-function ExpressionScale(value) {
-  this.value = value;
-  this.evaluate = function(env) {
+class ExpressionScale {
+  constructor(value) {
+    this.value = value;
+  }
+
+  evaluate(env) {
     return this.value;
   }
 }
@@ -658,32 +690,43 @@ class ExpressionNotEqual {
 
 // ----------------------------------------------------------------------------
 
-function ExpressionRandom(min, max) {
-  this.min = min;
-  this.max = max;
-  this.evaluate = function(env) {
+class ExpressionRandom {
+  constructor(min, max) {
+    this.min = min;
+    this.max = max;
+  }
+
+  evaluate(env) {
     let minValue = this.min.evaluate(env).toInteger();
     let maxValue = this.max.evaluate(env).toInteger();
     return new ExpressionInteger(Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue);
   }
 }
 
-function ExpressionReal(value) {
-  this.value = value;
-  this.evaluate = function(env) {
+class ExpressionReal {
+  constructor(value) {
+    this.value = value;
+  }
+
+  evaluate(env) {
     return this;
   }
-  this.toReal = function(env) {
+
+  toReal(env) {
     return this.value;
   }
-  this.toString = function() {
+
+  toString() {
     return '' + this.value;
   }
 }
 
-function ExpressionChord(notes) {
-  this.notes = notes;
-  this.evaluate = function(env) {
+class ExpressionChord {
+  constructor(notes) {
+    this.notes = notes;
+  }
+
+  evaluate(env) {
     let ids = this.notes.map(note => note.evaluate(env).toInteger());
     if (ids.length > 0) {
       env.halfstep = ids[0];
@@ -710,104 +753,143 @@ function durationToName(duration) {
   return durationName;
 }
 
-function StatementPrint(message) {
-  this.message = message;
-  this.evaluate = function(env) {
+class StatementPrint {
+  constructor(message) {
+    this.message = message;
+  }
+
+  evaluate(env) {
     console.log(message.evaluate(env).toString());
   }
 }
 
-function StatementRest(duration) {
-  this.duration = duration;
-  this.evaluate = function(env) {
+class StatementRest {
+  constructor(duration) {
+    this.duration = duration;
+  }
+
+  evaluate(env) {
     let durationValue = duration.evaluate(env).toInteger();
     env.emit(new Rest(durationValue));
   }
 }
 
-function StatementReroot() {
-  this.evaluate = function(env) {
+class StatementReroot {
+  constructor() {
+  }
+
+  evaluate(env) {
     env.root = env.halfstep % 12;
   }
 }
 
-function StatementMark() {
-  this.evaluate = function(env) {
+class StatementMark {
+  constructor() {
+  }
+
+  evaluate(env) {
     env.marks.push(env.halfstep);
   }
 }
 
-function StatementBack() {
-  this.evaluate = function(env) {
+class StatementBack {
+  constructor() {
+  }
+
+  evaluate(env) {
     env.halfstep = env.marks[env.marks.length - 1];
   }
 }
 
-function StatementUnmark() {
-  this.evaluate = function(env) {
+class StatementUnmark {
+  constructor() {
+  }
+
+  evaluate(env) {
     env.marks.pop();
   }
 }
 
-function StatementTimeSignature(beatsPerMeasure, beatNote) {
-  this.beatsPerMeasure = beatsPerMeasure;
-  this.beatNote = beatNote;
-  this.evaluate = function(env) {
+class StatementTimeSignature {
+  constructor(beatsPerMeasure, beatNote) {
+    this.beatsPerMeasure = beatsPerMeasure;
+    this.beatNote = beatNote;
+  }
+
+  evaluate(env) {
     env.beatsPerMeasure = beatsPerMeasure;
     env.beatNote = beatNote;
   }
 }
 
-function StatementKeySignature(letter, accidental, scale) {
-  this.letter = letter;
-  this.accidental = accidental;
-  this.scale = scale;
-  this.evaluate = function(env) {
+class StatementKeySignature {
+  constructor(letter, accidental, scale) {
+    this.letter = letter;
+    this.accidental = accidental;
+    this.scale = scale;
+  }
+
+  evaluate(env) {
     env.root = this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
     env.scale = this.scale.evaluate(env);
   }
 }
 
-function StatementBlock(statements) {
-  this.statements = statements;
-  this.evaluate = function(env) {
-    for (let statement of statements) {
+class StatementBlock {
+  constructor(statements) {
+    this.statements = statements;
+  }
+
+  evaluate(env) {
+    for (let statement of this.statements) {
       statement.evaluate(env);
     }
   }
 }
 
-function StatementProgram(block) {
-  this.block = block;
-  this.evaluate = function(env) {
+class StatementProgram {
+  constructor(block) {
+    this.block = block;
+  }
+
+  evaluate(env) {
     env.push(new Song());
     this.block.evaluate(env);
   }
 }
 
-function StatementGet(identifier) {
-  this.identifier = identifier;
-  this.evaluate = function(env) {
+class StatementGet {
+  constructor(identifier) {
+    this.identifier = identifier;
+  }
+
+  evaluate(env) {
     return env.bindings[identifier].value;
   }
 }
 
-function StatementSet(identifier, value) {
-  this.identifier = identifier;
-  this.value = value;
-  this.evaluate = function(env) {
-    env.bindings[identifier] = {
+class StatementSet {
+  constructor(identifier, value) {
+    this.identifier = identifier;
+    this.value = value;
+  }
+
+  evaluate(env) {
+    env.bindings[this.identifier] = {
       identifier: this.identifier,
       value: this.value,
     };
   }
 }
 
-function StatementTo(identifier, parameters, body) {
-  this.identifier = identifier;
-  this.parameters = parameters;
-  this.body = body;
-  this.evaluate = function(env) {
+class StatementTo {
+  constructor(identifier, parameters, body) {
+    this.identifier = identifier;
+    this.parameters = parameters;
+    this.body = body;
+  }
+
+  evaluate(env) {
     env.bindings[identifier] = {
       identifier: this.identifier,
       parameters: this.parameters,
@@ -816,16 +898,22 @@ function StatementTo(identifier, parameters, body) {
   }
 }
 
-function StatementVariableGetter(identifier) {
-  this.identifier = identifier;
-  this.evaluate = function(env) {
+class StatementVariableGetter {
+  constructor(identifier) {
+    this.identifier = identifier;
+  }
+
+  evaluate(env) {
     return env.bindings[this.identifier].value.evaluate(env);
   }
 }
 
-function StatementCall(identifier, actualParameters) {
-  this.identifier = identifier;
-  this.evaluate = function(env) {
+class StatementCall {
+  constructor(identifier, actualParameters) {
+    this.identifier = identifier;
+  }
+
+  evaluate(env) {
     let define = env.bindings[this.identifier];
     // let subBindings = {};
     for (let actualParameter of actualParameters) {
@@ -901,9 +989,12 @@ class StatementIf {
   }
 }
 
-function StatementRepeat(block) {
-  this.block = block;
-  this.evaluate = function(env) {
+class StatementRepeat {
+  constructor(block) {
+    this.block = block;
+  }
+
+  evaluate(env) {
     env.push(new Repeat());
     this.block.evaluate(env);
     let sequence = env.pop();
@@ -911,9 +1002,12 @@ function StatementRepeat(block) {
   }
 }
 
-function StatementSlur(block) {
-  this.block = block;
-  this.evaluate = function(env) {
+class StatementSlur {
+  constructor(block) {
+    this.block = block;
+  }
+
+  evaluate(env) {
     env.push(new Slur());
     this.block.evaluate(env);
     let sequence = env.pop();
@@ -921,10 +1015,13 @@ function StatementSlur(block) {
   }
 }
 
-function StatementX(count, block) {
-  this.count = count;
-  this.block = block;
-  this.evaluate = function(env) {
+class StatementX {
+  constructor(count, block) {
+    this.count = count;
+    this.block = block;
+  }
+
+  evaluate(env) {
     let n = this.count.evaluate(env).toInteger();
     for (let i = 0; i < n; ++i) {
       this.block.evaluate(env);
@@ -932,11 +1029,14 @@ function StatementX(count, block) {
   }
 }
 
-function StatementRepeat12(common, first, second) {
-  this.common = common;
-  this.first = first;
-  this.second = second;
-  this.evaluate = function(env) {
+class StatementRepeat12 {
+  constructor(common, first, second) {
+    this.common = common;
+    this.first = first;
+    this.second = second;
+  }
+
+  evaluate(env) {
     env.push(new Sequence());
     this.common.evaluate(env);
     let commonSequence = env.pop();
@@ -953,60 +1053,78 @@ function StatementRepeat12(common, first, second) {
   }
 }
 
-function StatementJump(note) {
-  this.note = note;
-  this.evaluate = function(env) {
+class StatementJump {
+  constructor(note) {
+    this.note = note;
+  }
+
+  evaluate(env) {
     // console.log(this.note.evaluate(env));
     env.halfstep = this.note.evaluate(env).toInteger();
   }
 }
 
-function StatementPlayRelative(deltaValue, deltaUnit, duration) {
-  this.deltaValue = deltaValue;
-  this.deltaUnit = deltaUnit;
-  this.duration = duration;
-  this.evaluate = function(env) {
+class StatementPlayRelative {
+  constructor(deltaValue, deltaUnit, duration) {
+    this.deltaValue = deltaValue;
+    this.deltaUnit = deltaUnit;
+    this.duration = duration;
+  }
+
+  evaluate(env) {
     let id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
     let durationValue = this.duration.evaluate(env).toInteger();
     env.emit(new Note(id, durationValue));
   }
 }
 
-function StatementPlayAbsolute(letter, accidental, octave, duration) {
-  this.letter = letter;
-  this.accidental = accidental;
-  this.octave = octave;
-  this.duration = duration;
-  this.evaluate = function(env) {
+class StatementPlayAbsolute {
+  constructor(letter, accidental, octave, duration) {
+    this.letter = letter;
+    this.accidental = accidental;
+    this.octave = octave;
+    this.duration = duration;
+  }
+
+  evaluate(env) {
     let id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
     let durationValue = this.duration.evaluate(env).toInteger();
     env.emit(new Note(id, durationValue));
   }
 }
 
-function StatementJumpRelative(deltaValue, deltaUnit) {
-  this.deltaValue = deltaValue;
-  this.deltaUnit = deltaUnit;
-  this.evaluate = function(env) {
+class StatementJumpRelative {
+  constructor(deltaValue, deltaUnit) {
+    this.deltaValue = deltaValue;
+    this.deltaUnit = deltaUnit;
+  }
+
+  evaluate(env) {
     let id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
     env.halfstep = id;
   }
 }
 
-function StatementJumpAbsolute(letter, accidental, octave) {
-  this.letter = letter;
-  this.accidental = accidental;
-  this.octave = octave;
-  this.evaluate = function(env) {
+class StatementJumpAbsolute {
+  constructor(letter, accidental, octave) {
+    this.letter = letter;
+    this.accidental = accidental;
+    this.octave = octave;
+  }
+
+  evaluate(env) {
     let id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
     env.halfstep = id;
   }
 }
 
-function StatementPlay(note, duration) {
-  this.note = note;
-  this.duration = duration;
-  this.evaluate = function(env) {
+class StatementPlay {
+  constructor(note, duration) {
+    this.note = note;
+    this.duration = duration;
+  }
+
+  evaluate(env) {
     let durationValue = this.duration.evaluate(env).toInteger();
     let ids = this.note.evaluate(env);
     if (Array.isArray(ids)) {
@@ -1014,6 +1132,20 @@ function StatementPlay(note, duration) {
     } else {
       env.emit(new Note(ids, durationValue));
     }
+  }
+}
+
+class ParseException extends Error {
+  constructor(block, message) {
+    super(message);
+    this.block = block;
+  }
+}
+
+class RuntimeException extends Error {
+  constructor(block, message) {
+    super(message);
+    this.block = block;
   }
 }
 
@@ -3108,8 +3240,6 @@ function wrap(s, lineLength) {
   console.log("pattern:", pattern);
   return s.replace(new RegExp(pattern, 'g'), '$1\n');
 }
-
-let lastWarnedBlock = null;
 
 function render() {
   let musicXML = document.getElementById('scratch').value;
