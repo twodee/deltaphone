@@ -759,7 +759,7 @@ class StatementPrint {
   }
 
   evaluate(env) {
-    console.log(message.evaluate(env).toString());
+    console.log(this.message.evaluate(env).toString());
   }
 }
 
@@ -769,7 +769,7 @@ class StatementRest {
   }
 
   evaluate(env) {
-    let durationValue = duration.evaluate(env).toInteger();
+    let durationValue = this.duration.evaluate(env).toInteger();
     env.emit(new Rest(durationValue));
   }
 }
@@ -3004,6 +3004,10 @@ function setup() {
         }
       }
     }
+
+    if (event.type == Blockly.Events.BLOCK_CREATE) {
+      rescope(workspace.getBlockById(event.blockId));
+    }
     
     if (event.type == Blockly.Events.BLOCK_CHANGE ||
         event.type == Blockly.Events.BLOCK_DELETE ||
@@ -3013,6 +3017,35 @@ function setup() {
       interpret();
     }
   });
+
+  function rescope(block) {
+    if (block.type == 'forRange') {
+      let identifierBlock = block.getInputTargetBlock('identifier');
+      let identifier = identifierBlock.getField('identifier').getText();
+      for (let child of block.getChildren()) {
+        reattach(child, identifier, identifierBlock);
+      }
+    } else if (block.type == 'set') {
+      let identifierBlock = block.getInputTargetBlock('identifier');
+      let identifier = identifierBlock.getField('identifier').getText();
+      for (let child of block.getChildren()) {
+        reattach(child, identifier, identifierBlock);
+      }
+    } else if (block.type == 'to') {
+    }
+  }
+
+  function reattach(root, identifier, sourceBlock) {
+    if (root.type == 'variableGetter') {
+      if (root.deltaphone.identifier == identifier) {
+        root.deltaphone.sourceBlockId = sourceBlock.id;
+      }
+    } else {
+      for (let child of root.getChildren()) {
+        reattach(child, identifier, sourceBlock);
+      }
+    }
+  }
 
   let directions = new Map();
   directions.set('horizontal', ['right', 'left']);
@@ -3236,8 +3269,6 @@ function interpret() {
 
 function wrap(s, lineLength) {
   let pattern = '(.{' + lineLength + ',}?)(\\s+)';
-
-  console.log("pattern:", pattern);
   return s.replace(new RegExp(pattern, 'g'), '$1\n');
 }
 
@@ -3253,6 +3284,35 @@ function workspaceToXml() {
   let xml = Blockly.Xml.workspaceToDom(workspace);
   return Blockly.Xml.domToPrettyText(xml);
 }
+
+// Blockly.duplicate_ = function(block) {
+  // Save the clipboard.
+  // var clipboardXml = Blockly.clipboardXml_;
+  // var clipboardSource = Blockly.clipboardSource_;
+
+  // Create a duplicate via a copy/paste operation.
+  // Blockly.copy_(block);
+  // console.log("Blockly.clipboardXml_:", Blockly.clipboardXml_);
+  // block.workspace.paste(Blockly.clipboardXml_);
+
+  // Restore the clipboard.
+  // Blockly.clipboardXml_ = clipboardXml;
+  // Blockly.clipboardSource_ = clipboardSource;
+// };
+
+// let oldOld = Blockly.Xml.domToBlockHeadless_;
+// Blockly.Xml.domToBlockHeadless_ = function(xmlBlock, workspace) {
+  // var id = xmlBlock.getAttribute('id');
+  // console.log("xmlBlock:", xmlBlock);
+  // console.log("id:", id);
+  // return oldOld(xmlBlock, workspace);
+// }
+
+// Blockly.WorkspaceSvg.prototype.newBlock = function(prototypeName, opt_id) {
+  // console.log("prototypeName:", prototypeName);
+  // console.log("opt_id:", opt_id);
+    // return new Blockly.BlockSvg(this, prototypeName, opt_id);
+// };
 
 function copyWorkspace() {
   // The clipboard API is new. See https://developers.google.com/web/updates/2018/03/clipboardapi.
