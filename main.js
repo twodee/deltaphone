@@ -4,6 +4,7 @@ let expressionColor = 270;
 let statementColor = 180;
 let parameterColor = 330;
 let lastWarnedBlock = null;
+let scoreRoot;
 
 let letters = [
   ['C', '0'],
@@ -3253,9 +3254,17 @@ function interpret() {
       },
     };
     program.evaluate(env);
-    let xml = env.sequences[0].toXML(env);
-    document.getElementById('scratch').value = xml;
-    render();
+
+    if (env.sequences[0].items.length > 0) {
+      console.log("then");
+      $('#score').show();
+      let xml = env.sequences[0].toXML(env);
+      document.getElementById('scratch').value = xml;
+      render();
+    } else {
+      console.log("else");
+      $('#score').hide();
+    }
   } catch (e) {
     lastWarnedBlock = e.block;
     if (e.hasOwnProperty('block')) {
