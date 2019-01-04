@@ -818,8 +818,8 @@ class StatementTimeSignature {
   }
 
   evaluate(env) {
-    env.beatsPerMeasure = beatsPerMeasure;
-    env.beatNote = beatNote;
+    env.beatsPerMeasure = this.beatsPerMeasure;
+    env.beatNote = this.beatNote;
   }
 }
 
@@ -865,7 +865,7 @@ class StatementGet {
   }
 
   evaluate(env) {
-    return env.bindings[identifier].value;
+    return env.bindings[this.identifier].value;
   }
 }
 
@@ -891,7 +891,7 @@ class StatementTo {
   }
 
   evaluate(env) {
-    env.bindings[identifier] = {
+    env.bindings[this.identifier] = {
       identifier: this.identifier,
       parameters: this.parameters,
       body: this.body,
@@ -912,17 +912,24 @@ class StatementVariableGetter {
 class StatementCall {
   constructor(identifier, actualParameters) {
     this.identifier = identifier;
+    this.actualParameters = actualParameters;
   }
 
   evaluate(env) {
     let define = env.bindings[this.identifier];
     // let subBindings = {};
-    for (let actualParameter of actualParameters) {
+    for (let actualParameter of this.actualParameters) {
+      let value;
       if (actualParameter.mode == 'value') {
-        env.bindings[actualParameter.identifier] = actualParameter.expression.evaluate(env);
+        value = actualParameter.expression.evaluate(env);
       } else {
-        env.bindings[actualParameter.identifier] = actualParameter.expression;
+        value = actualParameter.expression;
       }
+
+      env.bindings[actualParameter.identifier] = {
+        identifier: actualParameter.identifier,
+        value: value,
+      };
     }
     // let oldBindings = env.bindings;
     // env.bindings = subBindings;
@@ -1060,7 +1067,6 @@ class StatementJump {
   }
 
   evaluate(env) {
-    // console.log(this.note.evaluate(env));
     env.halfstep = this.note.evaluate(env).toInteger();
   }
 }
@@ -1736,7 +1742,7 @@ let blockDefinitions = {
     },
     deltaphone: {
       identifier: null,
-      toBlockId: null,
+      sourceBlockId: null,
       mode: null,
     },
     tree: function() {
@@ -2106,12 +2112,12 @@ function deleteTo(toBlock) {
   toBlock.dispose();
 }
 
-function removeCalls(root, toBlockId) {
-  if (root.type == 'call' && root.deltaphone.toBlockId == toBlockId) {
+function removeCalls(root, sourceBlockId) {
+  if (root.type == 'call' && root.deltaphone.sourceBlockId == sourceBlockId) {
     root.dispose();
   } else {
     for (let child of root.getChildren()) {
-      removeCalls(child, toBlockId);
+      removeCalls(child, sourceBlockId);
     }
   }
 }
@@ -2174,9 +2180,9 @@ function shapeCallFromTo(toBlock, callBlock) {
   shapeCall(callBlock, toBlock.id, identifier, toBlock.deltaphone.parameters);
 }
 
-function shapeCall(callBlock, toBlockId, identifier, parameters) {
+function shapeCall(callBlock, sourceBlockId, identifier, parameters) {
   callBlock.deltaphone.identifier = identifier;
-  callBlock.deltaphone.toBlockId = toBlockId;
+  callBlock.deltaphone.sourceBlockId = sourceBlockId;
   syncMode(callBlock);
 
   if (parameters.length == 0) {
@@ -2292,7 +2298,7 @@ function syncCallToTo(toBlock, callBlock) {
 }
 
 function syncCallsToTo(root, toBlock) {
-  if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
+  if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
     syncCallToTo(toBlock, root);
   }
 
@@ -2513,15 +2519,6 @@ function setup() {
     let block = this;
     this.mixin({
       customContextMenu: function(options) {
-        let option = {
-          enabled: true,
-          text: 'Spawn count getter',
-          callback: function() {
-            spawnGet(block);
-          }
-        };
-        options.push(option);
-
         if (block.deltaphone.hasBy) {
           option = {
             enabled: true,
@@ -2558,15 +2555,6 @@ function setup() {
     let block = this;
     this.mixin({
       customContextMenu: function(options) {
-        // let option = {
-          // enabled: true,
-          // text: 'Spawn getter',
-          // callback: function() {
-            // spawnGet(block);
-          // }
-        // };
-        // options.push(option);
-
         let option = {
           enabled: true,
           text: 'Delete variable and getters',
@@ -2768,7 +2756,7 @@ function setup() {
 
   Blockly.Extensions.registerMutator('callMutator', {
     mutationToDom: function() {
-      let toBlock = workspace.getBlockById(this.deltaphone.toBlockId);
+      let toBlock = workspace.getBlockById(this.deltaphone.sourceBlockId);
       if (!toBlock) {
         return;
       }
@@ -2794,7 +2782,7 @@ function setup() {
       return container;
     },
     domToMutation: function(xml) {
-      let toBlockId = null;
+      let sourceBlockId = null;
       let toIdentifier = null;
       let parameters = [];
 
@@ -2802,7 +2790,7 @@ function setup() {
 
       for (let child of xml.children) {
         if (child.nodeName.toLowerCase() == 'to') {
-          toBlockId = child.getAttribute('id');
+          sourceBlockId = child.getAttribute('id');
           toIdentifier = child.getAttribute('identifier');
         } else if (child.nodeName.toLowerCase() == 'parameters') {
           for (let parameterNode of child.children) {
@@ -2813,7 +2801,7 @@ function setup() {
         }
       }
 
-      shapeCall(this, toBlockId, toIdentifier, parameters);
+      shapeCall(this, sourceBlockId, toIdentifier, parameters);
     }
   });
 
@@ -2982,7 +2970,12 @@ function setup() {
             syncMode(getterBlock);
 
             getterBlock.getField('identifier').setText(identifier);
-            getterBlock.deltaphone.sourceBlockId = event.newValue;
+
+            if (identifierBlock.type == 'formalParameter') {
+              getterBlock.deltaphone.sourceBlockId = workspace.getBlockById(event.newValue).getParent().id;
+            } else {
+              getterBlock.deltaphone.sourceBlockId = event.newValue;
+            }
 
             let referenceLocation = getterBlock.getRelativeToSurfaceXY();
             let mouse = workspace.currentGesture_.mouseDownXY_;
@@ -3007,7 +3000,7 @@ function setup() {
     }
 
     if (event.type == Blockly.Events.BLOCK_CREATE) {
-      rescope(workspace.getBlockById(event.blockId));
+      rescopeSetters(workspace.getBlockById(event.blockId));
     }
     
     if (event.type == Blockly.Events.BLOCK_CHANGE ||
@@ -3018,35 +3011,6 @@ function setup() {
       interpret();
     }
   });
-
-  function rescope(block) {
-    if (block.type == 'forRange') {
-      let identifierBlock = block.getInputTargetBlock('identifier');
-      let identifier = identifierBlock.getField('identifier').getText();
-      for (let child of block.getChildren()) {
-        reattach(child, identifier, identifierBlock);
-      }
-    } else if (block.type == 'set') {
-      let identifierBlock = block.getInputTargetBlock('identifier');
-      let identifier = identifierBlock.getField('identifier').getText();
-      for (let child of block.getChildren()) {
-        reattach(child, identifier, identifierBlock);
-      }
-    } else if (block.type == 'to') {
-    }
-  }
-
-  function reattach(root, identifier, sourceBlock) {
-    if (root.type == 'variableGetter') {
-      if (root.deltaphone.identifier == identifier) {
-        root.deltaphone.sourceBlockId = sourceBlock.id;
-      }
-    } else {
-      for (let child of root.getChildren()) {
-        reattach(child, identifier, sourceBlock);
-      }
-    }
-  }
 
   let directions = new Map();
   directions.set('horizontal', ['right', 'left']);
@@ -3133,6 +3097,52 @@ function buildResizer(side, element) {
   }
 }
 
+function rescopeSetters(block) {
+  if (block.type == 'forRange') {
+    let identifierBlock = block.getInputTargetBlock('identifier');
+    let identifier = identifierBlock.getField('identifier').getText();
+    for (let child of block.getChildren()) {
+      reattachReferences(child, identifier, identifierBlock);
+    }
+  } else if (block.type == 'set') {
+    let identifierBlock = block.getInputTargetBlock('identifier');
+    let identifier = identifierBlock.getField('identifier').getText();
+    for (let child of block.getChildren()) {
+      reattachReferences(child, identifier, identifierBlock);
+    }
+  } else if (block.type == 'to') {
+    // Reattach calls.
+    let identifier = block.getField('identifier').getText();
+    for (let child of block.getChildren()) {
+      reattachReferences(child, identifier, block);
+    }
+
+    // Reattach formals.
+    for (let formal of block.deltaphone.parameters) {
+      console.log("formal.identifier:", formal.identifier);
+      for (let child of block.getChildren()) {
+        reattachReferences(child, formal.identifier, block);
+      }
+    }
+  }
+
+  for (let child of block.getChildren()) {
+    rescopeSetters(child);
+  }
+}
+
+function reattachReferences(root, identifier, sourceBlock) {
+  if (root.type == 'variableGetter') {
+    if (root.deltaphone.identifier == identifier) {
+      root.deltaphone.sourceBlockId = sourceBlock.id;
+    }
+  } else {
+    for (let child of root.getChildren()) {
+      reattachReferences(child, identifier, sourceBlock);
+    }
+  }
+}
+
 function renameTo(toBlock, oldIdentifier, newIdentifier) {
   for (let root of workspace.getTopBlocks()) {
     syncCallsToTo(root, toBlock);
@@ -3141,7 +3151,7 @@ function renameTo(toBlock, oldIdentifier, newIdentifier) {
 
 function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
   for (let root of workspace.getTopBlocks()) {
-    renameVariableGetters(root, sourceBlock.id, newIdentifier);
+    renameVariableGetters(root, sourceBlock.id, oldIdentifier, newIdentifier);
   }
 }
 
@@ -3165,15 +3175,15 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
 
   // Rename all variableGetter children.
   for (let root of workspace.getTopBlocks()) {
-    renameParameterReferences(root, formalBlock.id, newIdentifier);
+    renameVariableGetters(root, formalBlock.getParent().id, oldIdentifier, newIdentifier);
     renameActuals(root, parent, oldIdentifier, newIdentifier);
   }
 }
 
 function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
-  if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
+  if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
     let input = root.getInput(formalize(oldIdentifier));
-    input.name = newIdentifier;
+    input.name = formalize(newIdentifier);
     syncCallToTo(toBlock, root);
   }
 
@@ -3182,14 +3192,14 @@ function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
   }
 }
 
-function renameVariableGetters(root, sourceBlockId, newIdentifier) {
-  if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlockId) {
+function renameVariableGetters(root, sourceBlockId, oldIdentifier, newIdentifier) {
+  if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlockId && root.getField('identifier').getText() == oldIdentifier) {
     root.getField('identifier').setText(newIdentifier);
     root.deltaphone.identifier = newIdentifier;
   }
 
   for (let child of root.getChildren()) {
-    renameVariableGetters(child, sourceBlockId, newIdentifier);
+    renameVariableGetters(child, sourceBlockId, oldIdentifier, newIdentifier);
   }
 }
 
@@ -3216,18 +3226,29 @@ function interpret() {
   saveLocal();
 
   try {
-    let roots = workspace.getTopBlocks();
     let statements = [];
-    roots.forEach(root => {
-      while (root) {
-        if (root.outputConnection) {
-          throw new ParseException(root, 'I found this stray value block and I wasn\'t sure what to do with it.');
-        } else {
-          statements.push(root.tree());
-          root = root.getNextBlock();
+
+    // Grab functions first.
+    for (let root of workspace.getTopBlocks()) {
+      if (root.type == 'to') {
+        statements.push(root.tree());
+      }
+    }
+
+    // And everything else second.
+    for (let root of workspace.getTopBlocks()) {
+      if (root.type != 'to') {
+        while (root) {
+          if (root.outputConnection) {
+            throw new ParseException(root, 'I found this stray value block and I wasn\'t sure what to do with it.');
+          } else {
+            statements.push(root.tree());
+            root = root.getNextBlock();
+          }
         }
       }
-    });
+    }
+
     let program = new StatementProgram(new StatementBlock(statements));
 
     let env = {
@@ -3256,13 +3277,11 @@ function interpret() {
     program.evaluate(env);
 
     if (env.sequences[0].items.length > 0) {
-      console.log("then");
       $('#score').show();
       let xml = env.sequences[0].toXML(env);
       document.getElementById('scratch').value = xml;
       render();
     } else {
-      console.log("else");
       $('#score').hide();
     }
   } catch (e) {
@@ -3271,7 +3290,7 @@ function interpret() {
       e.block.select();
       e.block.setWarningText(wrap(e.message, 15));
     } else {
-      console.error(e);
+      throw e;
     }
   }
 }
