@@ -44,12 +44,17 @@ let scales = [
 ];
 
 let noteDurations = [
-  [{'src': 'images/note1.svg', 'width': 13, 'height': 5, 'alt': 'Whole'}, '1'],
-  [{'src': 'images/note2.svg', 'width': 9, 'height': 20, 'alt': 'Half'}, '2'],
-  [{'src': 'images/note4.svg', 'width': 9, 'height': 20, 'alt': 'Quarter'}, '4'],
-  [{'src': 'images/note8.svg', 'width': 14, 'height': 20, 'alt': 'Eighth'}, '8'],
-  [{'src': 'images/note16.svg', 'width': 14, 'height': 20, 'alt': 'Sixteenth'}, '16'],
-  [{'src': 'images/note32.svg', 'width': 14, 'height': 24, 'alt': 'Thirty-second'}, '32'],
+  [{'src': 'images/music/note1.svg', 'width': 13, 'height': 5, 'alt': 'Whole'}, '1'],
+  [{'src': 'images/music/note2.svg', 'width': 9, 'height': 20, 'alt': 'Half'}, '2'],
+  [{'src': 'images/music/note4.svg', 'width': 9, 'height': 20, 'alt': 'Quarter'}, '4'],
+  [{'src': 'images/music/note8.svg', 'width': 14, 'height': 20, 'alt': 'Eighth'}, '8'],
+  [{'src': 'images/music/note16.svg', 'width': 14, 'height': 20, 'alt': 'Sixteenth'}, '16'],
+  [{'src': 'images/music/note32.svg', 'width': 14, 'height': 24, 'alt': 'Thirty-second'}, '32'],
+  [{'src': 'images/music/note2_dotted.svg', 'width': 9, 'height': 20, 'alt': 'Dotted Half'}, '-2'],
+  [{'src': 'images/music/note4_dotted.svg', 'width': 9, 'height': 20, 'alt': 'Dotted Quarter'}, '-4'],
+  [{'src': 'images/music/note8_dotted.svg', 'width': 14, 'height': 20, 'alt': 'Dotted Eighth'}, '-8'],
+  [{'src': 'images/music/note16_dotted.svg', 'width': 14, 'height': 20, 'alt': 'Dotted Sixteenth'}, '-16'],
+  [{'src': 'images/music/note32_dotted.svg', 'width': 14, 'height': 24, 'alt': 'Dotted Thirty-second'}, '-32'],
 ];
 
 let restDurations = [
@@ -348,7 +353,8 @@ class Chord {
 class Note {
   constructor(id, duration) {
     this.id = id;
-    this.duration = duration;
+    this.isDotted = duration < 0;
+    this.duration = Math.abs(duration);
     this.isChord = false;
     this.isFirstNote = false;
     this.isLastNote = false;
@@ -364,6 +370,10 @@ class Note {
         env.beats = 0;
       }
       env.beats += 4 / this.duration;
+      if (this.isDotted) {
+        // 4 -> 4 / 4 + 4 / (4 * 2) -> 1 + 0.5
+        env.beats += 4 / (this.duration * 2);
+      }
     }
 
     let alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
@@ -379,9 +389,15 @@ class Note {
     } else {
       alter = 0;
     }
+
     xml += '<note><pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(this.duration) + '</type>';
+
     if (this.isChord) {
       xml += '<chord/>';
+    }
+
+    if (this.isDotted) {
+      xml += '<dot/>';
     }
 
     if (env.isSlur) {
