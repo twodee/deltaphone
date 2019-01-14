@@ -543,7 +543,11 @@ class ExpressionScale {
   }
 
   evaluate(env) {
-    return this.value;
+    return this;
+  }
+
+  toInteger() {
+    return this.value == 'major' ? 0 : 1;
   }
 }
 
@@ -885,6 +889,16 @@ class StatementGet {
   }
 }
 
+class StatementReturn {
+  constructor(value) {
+    this.value = value;
+  }
+
+  evaluate(env) {
+    throw new Return(this.value.evaluate(env));
+  }
+}
+
 class StatementSet {
   constructor(identifier, value) {
     this.identifier = identifier;
@@ -950,7 +964,18 @@ class StatementCall {
     // let oldBindings = env.bindings;
     // env.bindings = subBindings;
     let body = env.bindings[this.identifier].body;
-    let result = body.evaluate(env);
+
+    let result;
+    try {
+      result = body.evaluate(env);
+    } catch (e) {
+      if (e instanceof Return) {
+        result = e.value;
+      } else {
+        throw e;
+      }
+    }
+
     // env.bindings = oldBindings;
     return result;
   }
@@ -1172,6 +1197,12 @@ class RuntimeException extends Error {
   }
 }
 
+class Return {
+  constructor(value) {
+    this.value = value;
+  }
+}
+
 function slurpStatements(block) {
   let statements = [];
   while (block) {
@@ -1232,7 +1263,7 @@ let blockDefinitions = {
         {
           type: 'input_value',
           name: 'a',
-          check: ['Integer', 'Real', 'Boolean'],
+          check: ['Integer', 'Real', 'Boolean', 'Scale'],
         },
         {
           type: 'field_dropdown',
@@ -1249,7 +1280,7 @@ let blockDefinitions = {
         {
           type: 'input_value',
           name: 'b',
-          check: ['Integer', 'Real', 'Boolean'],
+          check: ['Integer', 'Real', 'Boolean', 'Scale'],
         },
       ]
     },
@@ -1863,6 +1894,22 @@ let blockDefinitions = {
       let identifier = this.getInputTargetBlock('identifier').getFieldValue('identifier');
       let value = childToTree.call(this, 'value');
       return new StatementSet(identifier, value);
+    }
+  },
+  returnFromTo: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'return %1',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'value' },
+      ],
+      inputsInline: true,
+    },
+    tree: function() {
+      let value = childToTree.call(this, 'value');
+      return new StatementReturn(value);
     }
   },
   to: {
