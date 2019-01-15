@@ -1767,7 +1767,6 @@ let blockDefinitions = {
       ]
     },
     deltaphone: {
-      sourceBlockId: null,
       identifier: null,
       mode: null,
     },
@@ -2187,25 +2186,25 @@ function removeCalls(root, sourceBlockId) {
 
 // Variables ------------------------------------------------------------------
 
-function spawnGet(setBlock) {
-  let getBlock = workspace.newBlock('get');
-  shapeGetFromSet(setBlock, getBlock);
-  getBlock.initSvg();
-  getBlock.render();
-  getBlock.select();
-}
+// function spawnGet(setBlock) {
+  // let getBlock = workspace.newBlock('get');
+  // shapeGetFromSet(setBlock, getBlock);
+  // getBlock.initSvg();
+  // getBlock.render();
+  // getBlock.select();
+// }
 
-function shapeGetFromSet(setBlock, getBlock) {
-  let identifier = setBlock.getField('identifier').getText();
-  shapeGet(getBlock, setBlock.id, identifier);
-}
+// function shapeGetFromSet(setBlock, getBlock) {
+  // let identifier = setBlock.getField('identifier').getText();
+  // shapeGet(getBlock, setBlock.id, identifier);
+// }
 
-function shapeGet(getBlock, setBlockId, identifier) {
-  getBlock.deltaphone.identifier = identifier;
-  getBlock.deltaphone.setBlockId = setBlockId;
-  let input = getBlock.appendDummyInput();
-  input.appendField(identifier);
-}
+// function shapeGet(getBlock, setBlockId, identifier) {
+  // getBlock.deltaphone.identifier = identifier;
+  // getBlock.deltaphone.setBlockId = setBlockId;
+  // let input = getBlock.appendDummyInput();
+  // input.appendField(identifier);
+// }
 
 // function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
   // for (let root of workspace.getTopBlocks()) {
@@ -2213,19 +2212,19 @@ function shapeGet(getBlock, setBlockId, identifier) {
   // }
 // }
 
-function syncGetsToSet(root, sourceBlock) {
-  if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlock.id) {
-    setGetToSet(sourceBlock, root);
-  }
+// function syncGetsToSet(root, sourceBlock) {
+  // if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlock.id) {
+    // setGetToSet(sourceBlock, root);
+  // }
 
-  for (let child of root.getChildren()) {
-    syncGetsToSet(child, sourceBlock);
-  }
-}
+  // for (let child of root.getChildren()) {
+    // syncGetsToSet(child, sourceBlock);
+  // }
+// }
 
-function syncGetToSet(setBlock, getBlock) {
-  shapeGetFromSet(setBlock, getBlock);
-}
+// function syncGetToSet(setBlock, getBlock) {
+  // shapeGetFromSet(setBlock, getBlock);
+// }
 
 // Calls ----------------------------------------------------------------------
 
@@ -3036,8 +3035,6 @@ function setup() {
 
             if (identifierBlock.type == 'formalParameter') {
               getterBlock.deltaphone.sourceBlockId = workspace.getBlockById(event.newValue).getParent().id;
-            } else {
-              getterBlock.deltaphone.sourceBlockId = event.newValue;
             }
 
             let referenceLocation = getterBlock.getRelativeToSurfaceXY();
@@ -3161,19 +3158,7 @@ function buildResizer(side, element) {
 }
 
 function rescopeSetters(block) {
-  if (block.type == 'forRange') {
-    let identifierBlock = block.getInputTargetBlock('identifier');
-    let identifier = identifierBlock.getField('identifier').getText();
-    for (let child of block.getChildren()) {
-      reattachReferences(child, identifier, identifierBlock);
-    }
-  } else if (block.type == 'set') {
-    let identifierBlock = block.getInputTargetBlock('identifier');
-    let identifier = identifierBlock.getField('identifier').getText();
-    for (let child of block.getChildren()) {
-      reattachReferences(child, identifier, identifierBlock);
-    }
-  } else if (block.type == 'to') {
+  if (block.type == 'to') {
     // Reattach calls.
     let identifier = block.getField('identifier').getText();
     for (let child of block.getChildren()) {
@@ -3182,7 +3167,6 @@ function rescopeSetters(block) {
 
     // Reattach formals.
     for (let formal of block.deltaphone.parameters) {
-      console.log("formal.identifier:", formal.identifier);
       for (let child of block.getChildren()) {
         reattachReferences(child, formal.identifier, block);
       }
@@ -3195,14 +3179,8 @@ function rescopeSetters(block) {
 }
 
 function reattachReferences(root, identifier, sourceBlock) {
-  if (root.type == 'variableGetter') {
-    if (root.deltaphone.identifier == identifier) {
-      root.deltaphone.sourceBlockId = sourceBlock.id;
-    }
-  } else {
-    for (let child of root.getChildren()) {
-      reattachReferences(child, identifier, sourceBlock);
-    }
+  for (let child of root.getChildren()) {
+    reattachReferences(child, identifier, sourceBlock);
   }
 }
 
@@ -3213,9 +3191,23 @@ function renameTo(toBlock, oldIdentifier, newIdentifier) {
 }
 
 function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
-  for (let root of workspace.getTopBlocks()) {
-    renameVariableGetters(root, sourceBlock.id, oldIdentifier, newIdentifier);
+  // There are two scopes: in-function and out-function. Each function has its
+  // own scope, and functions are neatly organized. Non-function code is more
+  // scattered. Variables only get renamed within their function's scope or in
+  // the common out-function scope.
+
+  Blockly.Events.disable();
+  let topBlock = sourceBlock.getRootBlock();
+  if (topBlock.type == 'to') {
+    renameVariableGetters(topBlock, oldIdentifier, newIdentifier);
+  } else {
+    for (let root of workspace.getTopBlocks()) {
+      if (root.type != 'to') {
+        renameVariableGetters(root, oldIdentifier, newIdentifier);
+      }
+    }
   }
+  Blockly.Events.enable();
 }
 
 function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
@@ -3255,14 +3247,16 @@ function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
   }
 }
 
-function renameVariableGetters(root, sourceBlockId, oldIdentifier, newIdentifier) {
-  if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlockId && root.getField('identifier').getText() == oldIdentifier) {
+function renameVariableGetters(root, oldIdentifier, newIdentifier) {
+  if (root.type == 'variableGetter' && root.getField('identifier').getText() == oldIdentifier) {
     root.getField('identifier').setText(newIdentifier);
     root.deltaphone.identifier = newIdentifier;
+  } else if (root.type == 'setIdentifier' && root.getField('identifier').getText() == oldIdentifier) {
+    root.getField('identifier').setText(newIdentifier);
   }
 
   for (let child of root.getChildren()) {
-    renameVariableGetters(child, sourceBlockId, oldIdentifier, newIdentifier);
+    renameVariableGetters(child, oldIdentifier, newIdentifier);
   }
 }
 
