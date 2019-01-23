@@ -885,7 +885,7 @@ class StatementGet {
   }
 
   evaluate(env) {
-    return env.bindings[this.identifier].value;
+    return env.variables[this.identifier].value;
   }
 }
 
@@ -906,7 +906,7 @@ class StatementSet {
   }
 
   evaluate(env) {
-    env.bindings[this.identifier] = {
+    env.variables[this.identifier] = {
       identifier: this.identifier,
       value: this.value,
     };
@@ -921,7 +921,7 @@ class StatementTo {
   }
 
   evaluate(env) {
-    env.bindings[this.identifier] = {
+    env.functions[this.identifier] = {
       identifier: this.identifier,
       parameters: this.parameters,
       body: this.body,
@@ -935,7 +935,7 @@ class StatementVariableGetter {
   }
 
   evaluate(env) {
-    return env.bindings[this.identifier].value.evaluate(env);
+    return env.variables[this.identifier].value.evaluate(env);
   }
 }
 
@@ -946,8 +946,7 @@ class StatementCall {
   }
 
   evaluate(env) {
-    let define = env.bindings[this.identifier];
-    // let subBindings = {};
+    let localVariables = {};
     for (let actualParameter of this.actualParameters) {
       let value;
       if (actualParameter.mode == 'value') {
@@ -956,14 +955,15 @@ class StatementCall {
         value = actualParameter.expression;
       }
 
-      env.bindings[actualParameter.identifier] = {
+      localVariables[actualParameter.identifier] = {
         identifier: actualParameter.identifier,
         value: value,
       };
     }
-    // let oldBindings = env.bindings;
-    // env.bindings = subBindings;
-    let body = env.bindings[this.identifier].body;
+
+    let oldBindings = env.variables;
+    env.variables = localVariables;
+    let body = env.functions[this.identifier].body;
 
     let result;
     try {
@@ -974,9 +974,10 @@ class StatementCall {
       } else {
         throw e;
       }
+    } finally {
+      env.variables = oldBindings;
     }
 
-    // env.bindings = oldBindings;
     return result;
   }
 }
@@ -1008,7 +1009,7 @@ class StatementForRange {
     }
 
     for (let i = start; i <= stop; i += delta) {
-      env.bindings[this.identifier] = {
+      env.variables[this.identifier] = {
         identifier: this.identifier,
         value: new ExpressionInteger(i),
       };
@@ -3230,16 +3231,22 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
 
   // Rename all variableGetter children.
   for (let root of workspace.getTopBlocks()) {
-    renameVariableGetters(root, formalBlock.getParent().id, oldIdentifier, newIdentifier);
     renameActuals(root, parent, oldIdentifier, newIdentifier);
   }
+  renameVariableGetters(parent, oldIdentifier, newIdentifier);
 }
 
 function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
+  console.log("oldIdentifier:", oldIdentifier);
+  console.log("newIdentifier:", newIdentifier);
   if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
     let input = root.getInput(formalize(oldIdentifier));
-    input.name = formalize(newIdentifier);
-    syncCallToTo(toBlock, root);
+
+    // Input will be null if the parameter is brand new.
+    if (input) {
+      input.name = formalize(newIdentifier);
+      syncCallToTo(toBlock, root);
+    }
   }
 
   for (let child of root.getChildren()) {
@@ -3317,7 +3324,8 @@ function interpret() {
       halfstep: 48,
       beatsPerMeasure: 4,
       beatNote: 4,
-      bindings: {},
+      functions: {},
+      variables: {},
       marks: [],
       sequences: [],
       isSlur: false,
