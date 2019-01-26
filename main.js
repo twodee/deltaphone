@@ -116,6 +116,15 @@ class Song {
     xml += '  </part-list>\n';
     xml += '  <part id="P1">\n';
     xml += '    <measure number="1">\n';
+    xml += '      <direction>\n';
+    xml += '        <direction-type>\n';
+    xml += '          <metronome>\n';
+    xml += '            <beat-unit>quarter</beat-unit>\n';
+    xml += '            <per-minute>' + env.bpm + '</per-minute>\n';
+    xml += '          </metronome>\n';
+    xml += '        </direction-type>\n';
+    xml += '        <sound tempo="' + env.bpm + '"/>\n';
+    xml += '      </direction>\n';
     xml += '      <attributes>\n';
     xml += '        <divisions>8</divisions>\n';
     xml += '        <key>\n';
@@ -831,6 +840,16 @@ class StatementUnmark {
   }
 }
 
+class StatementBeatsPerMinute {
+  constructor(beatsPerMinute) {
+    this.beatsPerMinute = beatsPerMinute;
+  }
+
+  evaluate(env) {
+    env.bpm = this.beatsPerMinute.evaluate(env).toInteger();
+  }
+}
+
 class StatementTimeSignature {
   constructor(beatsPerMeasure, beatNote) {
     this.beatsPerMeasure = beatsPerMeasure;
@@ -1528,6 +1547,21 @@ let blockDefinitions = {
   },
 
   // Commands
+  beatsPerMinute: {
+    configuration: {
+      colour: statementColor,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'beats per minute %1',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'speed', check: 'Integer' },
+      ]
+    },
+    tree: function() {
+      let speed = childToTree.call(this, 'speed');
+      return new StatementBeatsPerMinute(speed);
+    }
+  },
   timeSignature: {
     configuration: {
       colour: statementColor,
@@ -2972,6 +3006,7 @@ function setup() {
   };
 
   document.getElementById('playButton').addEventListener('click', () => {
+    // https://github.com/CoderLine/alphaTab/issues/188
     $('#score').alphaTab('playPause');
   });
 
@@ -3324,6 +3359,7 @@ function interpret() {
       halfstep: 48,
       beatsPerMeasure: 4,
       beatNote: 4,
+      bpm: 80,
       functions: {},
       variables: {},
       marks: [],
@@ -3342,8 +3378,10 @@ function interpret() {
     program.evaluate(env);
 
     if (env.sequences[0].items.length > 0) {
+      $('#score').alphaTab('playbackSpeed', env.bpm / 120);
       $('#score').show();
       let xml = env.sequences[0].toXML(env);
+      // console.log("xml:", xml);
       document.getElementById('scratch').value = xml;
       render();
     } else {

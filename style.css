@@ -12,7 +12,7 @@ body {
 .alphaTabSurface > svg:first-child, /* Top matter */
 /* .alphaTabSurface > svg:last-child, /* Attribution footer */ 
 .alphaTabSurface > svg:nth-child(2) > *:nth-child(1), /* beat note */
-.alphaTabSurface > svg:nth-child(2) > *:nth-child(2), /* bpm */
+/* .alphaTabSurface > svg:nth-child(2) > *:nth-child(2), /* bpm */ */
 .alphaTabSurface > svg:nth-child(2) > *:nth-last-child(5), /* dynamics */
 .alphaTabSurface > svg:not(:first-child):not(:last-child) > *:nth-last-child(-n + 3) /* left brackets */
 {

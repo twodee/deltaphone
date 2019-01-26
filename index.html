@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>...</title>
+  <title>Deltaphone</title>
   <script src="https://code.jquery.com/jquery-3.3.1.min.js"></script>
   <script src="alphaTab/Build/JavaScript/swfobject.js"></script>
   <script src="alphaTab/Build/JavaScript/AlphaTab.js"></script>
@@ -35,7 +35,7 @@
 <textarea id="scratch"></textarea>
 
 <xml id="toolbox">
-  <category name="Actions">
+  <category name="Song">
     <block type="keySignature">
       <value name="letter">
         <block type="letter">
@@ -54,6 +54,15 @@
       </value>
     </block>
     <block type="timeSignature"></block>
+    <block type="beatsPerMinute">
+      <value name="speed">
+        <block type="integer">
+          <field name="value">80</field>
+        </block>
+      </value>
+    </block>
+  </category>
+  <category name="Play">
     <block type="playRelative">
       <value name="deltaValue">
         <block type="deltaValue">
@@ -93,35 +102,6 @@
         </block>
       </value>
     </block>
-    <block type="jumpRelative">
-      <value name="deltaValue">
-        <block type="deltaValue">
-          <field name="value">+1</field>
-        </block>
-      </value>
-      <value name="deltaUnit">
-        <block type="deltaUnit">
-          <field name="unit">keysteps</field>
-        </block>
-      </value>
-    </block>
-    <block type="jumpAbsolute">
-      <value name="letter">
-        <block type="letter">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="accidental">
-        <block type="accidental">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="octave">
-        <block type="integer">
-          <field name="value">4</field>
-        </block>
-      </value>
-    </block>
     <block type="rest">
       <value name="duration">
         <block type="restDuration">
@@ -129,85 +109,7 @@
         </block>
       </value>
     </block>
-    <block type="mark"></block>
-    <block type="back"></block>
-    <block type="unmark"></block>
-    <block type="set">
-      <value name="identifier">
-        <block type="setIdentifier">
-          <field name="identifier"></field>
-        </block>
-      </value>
-    </block>
-  </category>
-  <category name="Values">
-    <block type="integer"></block>
-    <block type="noteDuration">
-      <field name="value">4</field>
-    </block>
-    <block type="restDuration">
-      <field name="value">4</field>
-    </block>
-    <block type="accidental">
-      <field name="value">0</field>
-    </block>
-    <block type="letter">
-      <field name="value">0</field>
-    </block>
-    <block type="scale">
-      <field name="value">major</field>
-    </block>
-    <block type="deltaValue">
-      <field name="value">+1</field>
-    </block>
-    <block type="deltaUnit">
-      <field name="unit">keysteps</field>
-    </block>
-    <block type="random"></block>
-  </category>
-  <category name="Math">
-    <block type="arithmetic2"></block>
-  </category>
-  <category name="Logic">
-    <block type="truefalse"></block>
-    <block type="logic2"></block>
-    <block type="multif"></block>
-    <block type="multif">
-      <mutation arity="1" else="true"></mutation>
-    </block>
-  </category>
-  <category name="Structures">
-    <block type="to"></block>
-    <block type="returnFromTo"></block>
-    <block type="repeat"></block>
-    <block type="repeat12"></block>
-    <block type="ditto">
-      <value name="count">
-        <block type="integer">
-          <field name="value">2</field>
-        </block>
-      </value>
-    </block>
-    <block type="forRange">
-      <value name="identifier">
-        <block type="setIdentifier">
-          <field name="identifier">i</field>
-        </block>
-      </value>
-      <value name="lo">
-        <block type="integer">
-          <field name="value">0</field>
-        </block>
-      </value>
-      <value name="hi">
-        <block type="integer">
-          <field name="value">7</field>
-        </block>
-      </value>
-    </block>
     <block type="slur"></block>
-  </category>
-  <category name="Extra">
     <block type="play">
       <value name="note">
       </value>
@@ -217,7 +119,7 @@
         </block>
       </value>
     </block>
-    <block type="jump"></block>
+    <block type="chord"></block>
     <block type="position">
       <value name="letter">
         <block type="letter">
@@ -247,9 +149,118 @@
         </block>
       </value>
     </block>
-    <block type="chord"></block>
+  </category>
+  <category name="Jump">
+    <block type="jumpRelative">
+      <value name="deltaValue">
+        <block type="deltaValue">
+          <field name="value">+1</field>
+        </block>
+      </value>
+      <value name="deltaUnit">
+        <block type="deltaUnit">
+          <field name="unit">keysteps</field>
+        </block>
+      </value>
+    </block>
+    <block type="jumpAbsolute">
+      <value name="letter">
+        <block type="letter">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="accidental">
+        <block type="accidental">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="octave">
+        <block type="integer">
+          <field name="value">4</field>
+        </block>
+      </value>
+    </block>
+    <block type="jump"></block>
+    <block type="mark"></block>
+    <block type="back"></block>
+    <block type="unmark"></block>
     <block type="reroot"></block>
+  </category>
+  <category name="Loops">
+    <block type="repeat"></block>
+    <block type="repeat12"></block>
+    <block type="ditto">
+      <value name="count">
+        <block type="integer">
+          <field name="value">2</field>
+        </block>
+      </value>
+    </block>
+    <block type="forRange">
+      <value name="identifier">
+        <block type="setIdentifier">
+          <field name="identifier">i</field>
+        </block>
+      </value>
+      <value name="lo">
+        <block type="integer">
+          <field name="value">0</field>
+        </block>
+      </value>
+      <value name="hi">
+        <block type="integer">
+          <field name="value">7</field>
+        </block>
+      </value>
+    </block>
+  </category>
+  <category name="Functions">
+    <block type="to"></block>
+    <block type="returnFromTo"></block>
+  </category>
+  <category name="Variables">
+    <block type="set">
+      <value name="identifier">
+        <block type="setIdentifier">
+          <field name="identifier"></field>
+        </block>
+      </value>
+    </block>
     <block type="print"></block>
+  </category>
+  <category name="Logic">
+    <block type="truefalse"></block>
+    <block type="logic2"></block>
+    <block type="multif"></block>
+    <block type="multif">
+      <mutation arity="1" else="true"></mutation>
+    </block>
+  </category>
+  <category name="Values">
+    <block type="integer"></block>
+    <block type="noteDuration">
+      <field name="value">4</field>
+    </block>
+    <block type="restDuration">
+      <field name="value">4</field>
+    </block>
+    <block type="accidental">
+      <field name="value">0</field>
+    </block>
+    <block type="letter">
+      <field name="value">0</field>
+    </block>
+    <block type="scale">
+      <field name="value">major</field>
+    </block>
+    <block type="deltaValue">
+      <field name="value">+1</field>
+    </block>
+    <block type="deltaUnit">
+      <field name="unit">keysteps</field>
+    </block>
+    <block type="random"></block>
+    <block type="arithmetic2"></block>
   </category>
 </xml>
 
