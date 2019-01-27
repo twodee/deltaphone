@@ -3035,8 +3035,6 @@ function setup() {
   });
 
   workspace.addChangeListener(event => {
-    // console.log("event:", event);
-
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
       let block = workspace.getBlockById(event.blockId); 
       if (block.type == 'formalParameter') {
@@ -3063,7 +3061,6 @@ function setup() {
 
           if (identifierBlock.type == 'formalParameter' || identifierBlock.type == 'setIdentifier') {
             Blockly.selected.unselect(); // WHY?
-            console.log("unselect");
 
             let identifier = identifierBlock.getField('identifier').getText();
             let getterBlock = workspace.newBlock('variableGetter');
@@ -3088,7 +3085,6 @@ function setup() {
 
             getterBlock.initSvg();
             getterBlock.render();
-            console.log("select");
             getterBlock.bringToFront();
 
             getterBlock.moveBy(mouseX - referenceLocation.x - getterBlock.width / 2, mouseY - referenceLocation.y - getterBlock.height / 2);
@@ -3421,35 +3417,6 @@ function workspaceToXml() {
   let xml = Blockly.Xml.workspaceToDom(workspace);
   return Blockly.Xml.domToPrettyText(xml);
 }
-
-// Blockly.duplicate_ = function(block) {
-  // Save the clipboard.
-  // var clipboardXml = Blockly.clipboardXml_;
-  // var clipboardSource = Blockly.clipboardSource_;
-
-  // Create a duplicate via a copy/paste operation.
-  // Blockly.copy_(block);
-  // console.log("Blockly.clipboardXml_:", Blockly.clipboardXml_);
-  // block.workspace.paste(Blockly.clipboardXml_);
-
-  // Restore the clipboard.
-  // Blockly.clipboardXml_ = clipboardXml;
-  // Blockly.clipboardSource_ = clipboardSource;
-// };
-
-// let oldOld = Blockly.Xml.domToBlockHeadless_;
-// Blockly.Xml.domToBlockHeadless_ = function(xmlBlock, workspace) {
-  // var id = xmlBlock.getAttribute('id');
-  // console.log("xmlBlock:", xmlBlock);
-  // console.log("id:", id);
-  // return oldOld(xmlBlock, workspace);
-// }
-
-// Blockly.WorkspaceSvg.prototype.newBlock = function(prototypeName, opt_id) {
-  // console.log("prototypeName:", prototypeName);
-  // console.log("opt_id:", opt_id);
-    // return new Blockly.BlockSvg(this, prototypeName, opt_id);
-// };
 
 function copyWorkspace() {
   // The clipboard API is new. See https://developers.google.com/web/updates/2018/03/clipboardapi.
