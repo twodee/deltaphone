@@ -3035,6 +3035,8 @@ function setup() {
   });
 
   workspace.addChangeListener(event => {
+    // console.log("event:", event);
+
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
       let block = workspace.getBlockById(event.blockId); 
       if (block.type == 'formalParameter') {
@@ -3060,6 +3062,9 @@ function setup() {
           let identifierBlock = workspace.getBlockById(event.newValue); 
 
           if (identifierBlock.type == 'formalParameter' || identifierBlock.type == 'setIdentifier') {
+            Blockly.selected.unselect(); // WHY?
+            console.log("unselect");
+
             let identifier = identifierBlock.getField('identifier').getText();
             let getterBlock = workspace.newBlock('variableGetter');
 
@@ -3083,13 +3088,14 @@ function setup() {
 
             getterBlock.initSvg();
             getterBlock.render();
-            getterBlock.select();
+            console.log("select");
             getterBlock.bringToFront();
 
             getterBlock.moveBy(mouseX - referenceLocation.x - getterBlock.width / 2, mouseY - referenceLocation.y - getterBlock.height / 2);
 
             workspace.currentGesture_.setStartBlock(getterBlock);
             workspace.currentGesture_.setTargetBlock_(getterBlock);
+            getterBlock.select();
           }
         }
       }
@@ -3390,7 +3396,7 @@ function interpret() {
   } catch (e) {
     lastWarnedBlock = e.block;
     if (e.hasOwnProperty('block')) {
-      e.block.select();
+      // e.block.select(); // If I do this, it interferes with formal parameter reference selection.
       e.block.setWarningText(wrap(e.message, 15));
     } else {
       throw e;
