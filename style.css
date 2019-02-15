@@ -28,7 +28,7 @@ body {
   stroke: #0078ff;
 }
 
-#controls {
+#hud {
   position: absolute;
   left: 5px;
   top: 5px;
@@ -133,4 +133,30 @@ body {
   height: 100%;
 }
 
+#progress-bar {
+  border: 1px solid black;
+  border-radius: 20px;
+  position: relative;
+  width: 400px;
+  height: 10px;
+}
 
+#progress-child {
+  border-radius: 20px;
+  background-color: #6495ED;
+  width: 0%;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  /* z-index: -999999; */
+}
+
+#progress-label {
+  padding: 5px;
+  font-family: sans-serif;
+}
+
+#controls {
+  display: none;
+}

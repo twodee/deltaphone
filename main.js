@@ -3034,6 +3034,19 @@ function setup() {
     }
   });
 
+  var progressChild = $('#progress-child');
+  var progressRoot = $('#progress-root');
+
+  $('#score').on('alphaTab.soundFontLoad', (event, progress) => {
+    var percentage = Math.round(100.0 * (progress.loaded / progress.total));
+    progressChild.css('width', percentage + '%');
+  });
+
+  $('#score').on('alphaTab.soundFontLoaded', (event, progress) => {
+    progressRoot.css('display', 'none');
+    $('#controls').css('display', 'block');
+  });
+
   workspace.addChangeListener(event => {
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
       let block = workspace.getBlockById(event.blockId); 

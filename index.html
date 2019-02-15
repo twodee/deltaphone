@@ -22,9 +22,15 @@
     <div id="blocklyEditor"></div>
   </div>
   <div id="right">
-    <div id="controls">
-      <input type="button" value="Scorify" id="scorifyButton">
-      <input type="button" value="Play" id="playButton">
+    <div id="hud">
+      <div id="progress-root">
+        <div id="progress-bar"><div id="progress-child"></div></div>
+        <div id="progress-label">Loading SoundFont...</div>
+      </div>
+      <div id="controls">
+        <input type="button" value="Scorify" id="scorifyButton">
+        <input type="button" value="Play" id="playButton">
+      </div>
     </div>
     <div id="scoreRoot">
       <div id="score" data-player="general_user.sf2"></div>
