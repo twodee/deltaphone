@@ -164,7 +164,7 @@ class Sequence {
   toXML(env) {
     let xml = '';
 
-    if (env.beats == env.beatsPerMeasure) {
+    if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
       xml += breakMeasure(env);
       env.beats = 0;
     }
@@ -214,7 +214,7 @@ class Slur {
   toXML(env) {
     let xml = '';
 
-    if (env.beats == env.beatsPerMeasure) {
+    if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
       xml += breakMeasure(env);
       env.beats = 0;
     }
@@ -273,7 +273,7 @@ class Repeat12 {
   toXML(env) {
     let xml = '';
 
-    if (env.beats == env.beatsPerMeasure) {
+    if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
       xml += breakMeasure(env);
       env.beats = 0;
     }
@@ -285,7 +285,7 @@ class Repeat12 {
 
     xml += this.common.toXML(env);
 
-    if (env.beats == env.beatsPerMeasure) {
+    if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
       xml += breakMeasure(env);
       env.beats = 0;
     }
@@ -319,7 +319,7 @@ class Repeat {
   toXML(env) {
     let xml = '';
 
-    if (env.beats == env.beatsPerMeasure) {
+    if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
       xml += breakMeasure(env);
       env.beats = 0;
     }
@@ -374,11 +374,12 @@ class Note {
     let xml = '';
 
     if (!this.isChord) {
-      if (env.beats == env.beatsPerMeasure) {
+      if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
         xml += breakMeasure(env);
         env.beats = 0;
       }
       env.beats += 4 / this.duration;
+      console.log("env.beats:", env.beats);
       if (this.isDotted) {
         // 4 -> 4 / 4 + 4 / (4 * 2) -> 1 + 0.5
         env.beats += 4 / (this.duration * 2);
@@ -1575,6 +1576,9 @@ let blockDefinitions = {
           options: [
             ['4/4', '4/4'],
             ['3/4', '3/4'],
+            ['2/4', '2/4'],
+            ['3/8', '3/8'],
+            ['6/8', '6/8'],
           ],
         },
       ]
@@ -1589,6 +1593,15 @@ let blockDefinitions = {
       } else if (signature == '3/4') {
         beatsPerMeasure = 3;
         beatNote = 4;
+      } else if (signature == '2/4') {
+        beatsPerMeasure = 2;
+        beatNote = 4;
+      } else if (signature == '3/8') {
+        beatsPerMeasure = 3;
+        beatNote = 8;
+      } else if (signature == '6/8') {
+        beatsPerMeasure = 6;
+        beatNote = 8;
       }
       return new StatementTimeSignature(beatsPerMeasure, beatNote);
     }
@@ -1651,7 +1664,7 @@ let blockDefinitions = {
       colour: statementColor,
       previousStatement: null,
       nextStatement: null,
-      inputsInline: true,
+      inputsInline: false,
       message0: 'play %1 %2',
       args0: [
         { type: 'input_value', align: 'RIGHT', name: 'note' },
@@ -3351,12 +3364,14 @@ function interpret() {
 
     // And everything else second.
     for (let root of workspace.getTopBlocks()) {
-      if (root.type != 'to') {
+      if (!root.disabled && root.type != 'to') {
         while (root) {
           if (root.outputConnection) {
             throw new ParseException(root, 'I found this stray value block and I wasn\'t sure what to do with it.');
           } else {
-            statements.push(root.tree());
+            if (!root.disabled) {
+              statements.push(root.tree());
+            }
             root = root.getNextBlock();
           }
         }
