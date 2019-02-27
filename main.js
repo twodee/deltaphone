@@ -105,6 +105,54 @@ class Song {
   }
 
   toXML(env) {
+    let nfifths = 0;
+    let flag;
+
+    if (env.scale == 0) {
+      flag = env.root;
+    } else {
+      flag = (env.root + 3);
+    }
+
+    switch (flag % 12) {
+      case 0:
+        nfifths = 0;
+        break;
+      case 1:
+        nfifths = 7;
+        break;
+      case 2:
+        nfifths = 2;
+        break;
+      case 3:
+        nfifths = -3;
+        break;
+      case 4:
+        nfifths = 4;
+        break;
+      case 5:
+        nfifths = -1;
+        break;
+      case 6:
+        nfifths = 6;
+        break;
+      case 7:
+        nfifths = 1;
+        break;
+      case 8:
+        nfifths = -4;
+        break;
+      case 9:
+        nfifths = 3;
+        break;
+      case 10:
+        nfifths = -2;
+        break;
+      case 11:
+        nfifths = 5;
+        break;
+    }
+
     let xml = '';
     xml  = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
     xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
@@ -128,7 +176,7 @@ class Song {
     xml += '      <attributes>\n';
     xml += '        <divisions>8</divisions>\n';
     xml += '        <key>\n';
-    xml += '          <fifths>0</fifths>\n';
+    xml += '          <fifths>' + nfifths + '</fifths>\n';
     xml += '        </key>\n';
     xml += '        <time>\n';
     xml += '          <beats>' + env.beatsPerMeasure + '</beats>\n';
@@ -379,7 +427,6 @@ class Note {
         env.beats = 0;
       }
       env.beats += 4 / this.duration;
-      console.log("env.beats:", env.beats);
       if (this.isDotted) {
         // 4 -> 4 / 4 + 4 / (4 * 2) -> 1 + 0.5
         env.beats += 4 / (this.duration * 2);
@@ -872,7 +919,7 @@ class StatementKeySignature {
 
   evaluate(env) {
     env.root = this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
-    env.scale = this.scale.evaluate(env);
+    env.scale = this.scale.evaluate(env).toInteger();
   }
 }
 
@@ -3300,8 +3347,6 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
 }
 
 function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
-  console.log("oldIdentifier:", oldIdentifier);
-  console.log("newIdentifier:", newIdentifier);
   if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
     let input = root.getInput(formalize(oldIdentifier));
 
@@ -3411,7 +3456,6 @@ function interpret() {
       $('#score').alphaTab('playbackSpeed', env.bpm / 120);
       $('#score').show();
       let xml = env.sequences[0].toXML(env);
-      // console.log("xml:", xml);
       document.getElementById('scratch').value = xml;
       render();
     } else {
