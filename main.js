@@ -562,9 +562,10 @@ class ExpressionPosition {
 }
 
 class ExpressionDelta {
-  constructor(deltaValue, deltaUnit) {
+  constructor(deltaValue, deltaUnit, block) {
     this.deltaValue = deltaValue;
     this.deltaUnit = deltaUnit;
+    this.block = block;
   }
 
   evaluate(env) {
@@ -573,19 +574,25 @@ class ExpressionDelta {
     if (this.deltaUnit.value == 1) {
       jump = value;
     } else {
-      let majorScaleUp = [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1];
-      let majorScaleDown = [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2];
       let base = (env.halfstep - env.root + 12) % 12;
       jump = 0;
       if (value > 0) {
+        let scale = env.scale == 0 ? [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1] : [2, 0, 1, 2, 0, 2, 0, 1, 2, 0, 2, 0];
+        if (scale[base] == 0) {
+          throw new RuntimeException(this.block, 'You asked me to jump up in the current key, but the note you are jumping from is not in the current key.');
+        }
         for (let i = 0; i < value; ++i) {
-          jump += majorScaleUp[base];
-          base = (base + majorScaleUp[base]) % 12;
+          jump += scale[base];
+          base = (base + scale[base]) % 12;
         }
       } else if (value < 0) {
+        let scale = env.scale == 0 ? [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2] : [-2, 0, -2, -1, 0, -2, 0, -2, -1, 0, -2, 0];
+        if (scale[base] == 0) {
+          throw new RuntimeException(this.block, 'You asked me to jump down in the current key, but the note you are jumping from is not in the current key.');
+        }
         for (let i = 0; i < -value; ++i) {
-          jump += majorScaleDown[base];
-          base = (base + majorScaleDown[base] + 12) % 12;
+          jump += scale[base];
+          base = (base + scale[base] + 12) % 12;
         }
       }
     }
@@ -1181,14 +1188,15 @@ class StatementJump {
 }
 
 class StatementPlayRelative {
-  constructor(deltaValue, deltaUnit, duration) {
+  constructor(deltaValue, deltaUnit, duration, block) {
     this.deltaValue = deltaValue;
     this.deltaUnit = deltaUnit;
     this.duration = duration;
+    this.block = block;
   }
 
   evaluate(env) {
-    let id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
+    let id = new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env).toInteger();
     let durationValue = this.duration.evaluate(env).toInteger();
     env.emit(new Note(id, durationValue));
   }
@@ -1210,13 +1218,14 @@ class StatementPlayAbsolute {
 }
 
 class StatementJumpRelative {
-  constructor(deltaValue, deltaUnit) {
+  constructor(deltaValue, deltaUnit, block) {
     this.deltaValue = deltaValue;
     this.deltaUnit = deltaUnit;
+    this.block = block;
   }
 
   evaluate(env) {
-    let id = new ExpressionDelta(this.deltaValue, this.deltaUnit).evaluate(env).toInteger();
+    let id = new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env).toInteger();
     env.halfstep = id;
   }
 }
@@ -1437,8 +1446,7 @@ let blockDefinitions = {
       ]
     },
     tree: function() {
-      return new ExpressionDelta(childToTree.call(this, 'value'),
-                                 childToTree.call(this, 'unit'));
+      return new ExpressionDelta(childToTree.call(this, 'value'), childToTree.call(this, 'unit'), this);
     }
   },
   position: {
@@ -1756,8 +1764,7 @@ let blockDefinitions = {
       ]
     },
     tree: function() {
-      return new StatementJumpRelative(childToTree.call(this, 'deltaValue'),
-                                       childToTree.call(this, 'deltaUnit'));
+      return new StatementJumpRelative(childToTree.call(this, 'deltaValue'), childToTree.call(this, 'deltaUnit'), this);
     }
   },
   playAbsolute: {
@@ -1795,9 +1802,7 @@ let blockDefinitions = {
       ]
     },
     tree: function() {
-      return new StatementPlayRelative(childToTree.call(this, 'deltaValue'),
-                                       childToTree.call(this, 'deltaUnit'),
-                                       childToTree.call(this, 'duration'));
+      return new StatementPlayRelative(childToTree.call(this, 'deltaValue'), childToTree.call(this, 'deltaUnit'), childToTree.call(this, 'duration'), this);
     }
   },
   rest: {
@@ -3428,7 +3433,7 @@ function interpret() {
     let env = {
       isChord: false,
       root: 0,
-      scale: 'major',
+      scale: 0,
       iMeasure: 2,
       beats: 0,
       halfstep: 48,
