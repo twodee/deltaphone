@@ -38,9 +38,20 @@ let accidentals = [
   ['\u266d', '-1'],
 ];
 
+let heptatonicOffsets = {
+  up:   [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1],
+  down: [1, 0, 2, 0, 2, 1, 0, 2, 0, 2, 0, 2],
+}
+
 let scales = [
-  ['major', 'major'],
-  ['minor', 'minor'],
+  ['chromatic', '-1'],
+  ['major (ionian)', '0'],
+  ['dorian', '1'],
+  ['phrygian', '2'],
+  ['lydian', '3'],
+  ['mixolydian', '4'],
+  ['minor (aeolian)', '5'],
+  ['locrian', '6'],
 ];
 
 let noteDurations = [
@@ -105,53 +116,54 @@ class Song {
   }
 
   toXML(env) {
-    let nfifths = 0;
-    let flag;
+    // let nfifths = 0;
+    // let flag;
 
-    if (env.scale == 0) {
-      flag = env.root;
-    } else {
-      flag = (env.root + 3);
-    }
+    // if (env.scale == 0) {
+      // flag = env.root;
+    // } else {
+      // flag = (env.root + 3);
+    // }
 
-    switch (flag % 12) {
-      case 0:
-        nfifths = 0;
-        break;
-      case 1:
-        nfifths = 7;
-        break;
-      case 2:
-        nfifths = 2;
-        break;
-      case 3:
-        nfifths = -3;
-        break;
-      case 4:
-        nfifths = 4;
-        break;
-      case 5:
-        nfifths = -1;
-        break;
-      case 6:
-        nfifths = 6;
-        break;
-      case 7:
-        nfifths = 1;
-        break;
-      case 8:
-        nfifths = -4;
-        break;
-      case 9:
-        nfifths = 3;
-        break;
-      case 10:
-        nfifths = -2;
-        break;
-      case 11:
-        nfifths = 5;
-        break;
-    }
+    // switch (flag % 12) {
+      // case 0:
+        // nfifths = 0;
+        // break;
+      // case 1:
+        // nfifths = 7;
+        // break;
+      // case 2:
+        // nfifths = 2;
+        // break;
+      // case 3:
+        // nfifths = -3;
+        // break;
+      // case 4:
+        // nfifths = 4;
+        // break;
+      // case 5:
+        // nfifths = -1;
+        // break;
+      // case 6:
+        // nfifths = 6;
+        // break;
+      // case 7:
+        // nfifths = 1;
+        // break;
+      // case 8:
+        // nfifths = -4;
+        // break;
+      // case 9:
+        // nfifths = 3;
+        // break;
+      // case 10:
+        // nfifths = -2;
+        // break;
+      // case 11:
+        // nfifths = 5;
+        // break;
+    // }
+    // nfifths = 7;
 
     let xml = '';
     xml  = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
@@ -176,7 +188,8 @@ class Song {
     xml += '      <attributes>\n';
     xml += '        <divisions>8</divisions>\n';
     xml += '        <key>\n';
-    xml += '          <fifths>' + nfifths + '</fifths>\n';
+    xml += '          <fifths>' + env.nfifths + '</fifths>\n';
+    // xml += '          <mode>' + 'ionian' + '</mode>\n';
     xml += '        </key>\n';
     xml += '        <time>\n';
     xml += '          <beats>' + env.beatsPerMeasure + '</beats>\n';
@@ -433,21 +446,40 @@ class Note {
       }
     }
 
-    let alphas = ['C', 'C#', 'D', 'Eb', 'E', 'F', 'F#', 'G', 'Ab', 'A', 'Bb', 'B'];
-    let alpha = alphas[this.id % 12];
+    let spelling = env.noteSpellings[this.id % 12];
     let octave = Math.floor(this.id / 12);
+
+    // We may have enharmonic'd around the octave.
+    if (spelling == 'B#') {
+      --octave;
+    } else if (spelling == 'Cb') {
+      ++octave;
+    }
+
+    let suffix = spelling.substring(1);
     let alter;
-    if (alpha.length > 1) {
-      if (alpha[1] == '#') {
-        alter = 1;
-      } else {
-        alter = -1;
-      }
+
+    if (suffix === '##') {
+      alter = 2;
+    } else if (suffix === '#') {
+      alter = 1;
+    } else if (suffix === 'b') {
+      alter = -1;
+    } else if (suffix === 'bb') {
+      alter = -2;
     } else {
       alter = 0;
     }
 
-    xml += '<note><pitch><step>' + alpha[0] + '</step><alter>' + alter + '</alter><octave>' + octave + '</octave></pitch><type>' + durationToName(this.duration) + '</type>';
+    // 32 - 2^5 -  1
+    // 16 - 2^4 -  2
+    //  8 - 2^3 -  4
+    //  4 - 2^2 -  8
+    //  2 - 2^1 - 16
+    //  1 - 2^0 - 32
+    let exponent = Math.log2(this.duration);
+    let d = Math.pow(2, 5 - exponent);
+    xml += '<note><pitch><step>' + spelling[0] + '</step><alter>' + alter + '</alter><octave>' + octave + `</octave></pitch><duration>${d}</duration><type>` + durationToName(this.duration) + '</type>';
 
     if (this.isChord) {
       xml += '<chord/>';
@@ -498,8 +530,8 @@ class Rest {
       xml += breakMeasure(env);
       env.beats = 0;
     }
-    env.beats += 4 / duration;
-    xml += '<note><rest measure="yes"/><duration>' + duration + '</duration></note>\n';
+    env.beats += 4 / this.duration;
+    xml += '<note><rest measure="yes"/><duration>' + this.duration + '</duration></note>\n';
     return xml;
   }
 }
@@ -574,25 +606,26 @@ class ExpressionDelta {
     if (this.deltaUnit.value == 1) {
       jump = value;
     } else {
-      let base = (env.halfstep - env.root + 12) % 12;
+      let base = ((env.halfstep - env.root) % 12 + 12) % 12;
       jump = 0;
+
       if (value > 0) {
-        let scale = env.scale == 0 ? [2, 0, 2, 0, 1, 2, 0, 2, 0, 2, 0, 1] : [2, 0, 1, 2, 0, 2, 0, 1, 2, 0, 2, 0];
-        if (scale[base] == 0) {
-          throw new RuntimeException(this.block, 'You asked me to jump up in the current key, but the note you are jumping from is not in the current key.');
-        }
         for (let i = 0; i < value; ++i) {
-          jump += scale[base];
-          base = (base + scale[base]) % 12;
+          let delta = heptatonicOffsets.up[(base + env.rotation) % 12];
+          if (delta == 0) {
+            throw new RuntimeException(this.block, 'You asked me to jump up in the current key, but the note you are jumping from is not in the current key.');
+          }
+          jump += delta;
+          base = (base + delta) % 12;
         }
       } else if (value < 0) {
-        let scale = env.scale == 0 ? [-1, 0, -2, 0, -2, -1, 0, -2, 0, -2, 0, -2] : [-2, 0, -2, -1, 0, -2, 0, -2, -1, 0, -2, 0];
-        if (scale[base] == 0) {
-          throw new RuntimeException(this.block, 'You asked me to jump down in the current key, but the note you are jumping from is not in the current key.');
-        }
         for (let i = 0; i < -value; ++i) {
-          jump += scale[base];
-          base = (base + scale[base] + 12) % 12;
+          let delta = heptatonicOffsets.down[(base + env.rotation) % 12];
+          if (delta == 0) {
+            throw new RuntimeException(this.block, 'You asked me to jump down in the current key, but the note you are jumping from is not in the current key.');
+          }
+          jump -= delta;
+          base = (base - delta + 12) % 12;
         }
       }
     }
@@ -611,7 +644,7 @@ class ExpressionScale {
   }
 
   toInteger() {
-    return this.value == 'major' ? 0 : 1;
+    return this.value;
   }
 }
 
@@ -925,10 +958,112 @@ class StatementKeySignature {
   }
 
   evaluate(env) {
-    env.root = this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
-    env.scale = this.scale.evaluate(env).toInteger();
+    let letterOffset = this.letter.evaluate(env).toInteger();
+    let accidentalOffset = this.accidental.evaluate(env).toInteger();
+    let scale = this.scale.evaluate(env).toInteger();
+    setKeySignature(env, letterOffset, accidentalOffset);
   }
 }
+
+function setKeySignature(env, letterOffset, accidentalOffset, scale) {
+  env.root = letterOffset + accidentalOffset;
+  env.halfstep = 12 * (letterOffset >= 9 ? 3 : 4) + env.root;
+  env.scale = scale;
+  env.rotation = 0;
+
+  for (let i = 0; i < env.scale; ++i) {
+    env.rotation += heptatonicOffsets.up[env.rotation]; 
+  }
+
+  let letterLabel = letters.find(([label, offset]) => offset == letterOffset)[0];
+  let accidentalLabel;
+  if (accidentalOffset > 0) {
+    accidentalLabel = '#';
+  } else if (accidentalOffset < 0) {
+    accidentalLabel = 'b';
+  } else {
+    accidentalLabel = '';
+  }
+
+  // C   D   E F   G   A   B
+  // 2 0 2 0 1 2 0 2 0 2 0 1
+  // 0 1 2 3 4 5 6 7 8 9 0 1
+  
+  let offsets = [];
+  let current = 0;
+  for (let i = 0; i < 6; ++i) {
+    let index = (env.rotation + current) % 12;
+    offsets.push(heptatonicOffsets.up[index]);
+    current += heptatonicOffsets.up[index];
+  }
+
+  current = (env.root % 12 + 12) % 12;    
+  let firstSpelling = `${letterLabel}${accidentalLabel}`;
+  env.noteSpellings = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+  env.noteSpellings[current] = firstSpelling;
+  env.scaleSpellings = [firstSpelling];
+
+  let usedLetters = new Set();
+  usedLetters.add(letterLabel);
+  let ordinalA = 'A'.charCodeAt(0);
+
+  for (let offset of offsets) {
+    current = (current + offset) % 12;
+    letterLabel = String.fromCharCode((letterLabel.charCodeAt(0) + 1 - ordinalA) % 7 + ordinalA);
+    let spelling = possibleNoteSpellings[current].enharmonics.find(spelling => spelling.startsWith(letterLabel));
+    if (spelling) {
+      env.noteSpellings[current] = spelling;
+      env.scaleSpellings.push(spelling);
+      usedLetters.add(spelling.charAt(0));
+    } else {
+      console.err("uh oh");
+    }
+  }
+
+  let nsharps = env.scaleSpellings.reduce((sum, spelling) => sum + countChars(spelling, '#'), 0);
+  let nflats = env.scaleSpellings.reduce((sum, spelling) => sum + countChars(spelling, 'b'), 0);
+
+  env.nfifths = 0;
+  if (nsharps > 0) {
+    env.nfifths = nsharps;
+  } else if (nflats > 0) {
+    env.nfifths = -nflats;
+  }
+
+  // console.log(env.scaleSpellings.reduce((joined, spelling) => `${joined} ${spelling}`));
+
+  for (let i = 0; i < env.noteSpellings.length; ++i) {
+    if (env.noteSpellings[i] === 0) {
+      env.noteSpellings[i] = possibleNoteSpellings[i].canonical;
+    }
+  }
+}
+
+function countChars(s, c) {
+  let count = 0;
+  for (let i = 0; i < s.length; ++i) {
+    if (s[i] == c) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+// https://randscullard.com/CircleOfFifths/
+let possibleNoteSpellings = [
+  { canonical: 'C', enharmonics: ['B#', 'C', 'Dbb'] },
+  { canonical: 'C#', enharmonics: ['B##', 'C#', 'Db'] },
+  { canonical: 'D', enharmonics: ['C##', 'D', 'Ebb'] },
+  { canonical: 'Eb', enharmonics: ['D#', 'Eb', 'Fbb'] },
+  { canonical: 'E', enharmonics: ['D##', 'E', 'Fb'] },
+  { canonical: 'F', enharmonics: ['E#', 'F', 'Gbb'] },
+  { canonical: 'F#', enharmonics: ['E##', 'F#', 'Gb'] },
+  { canonical: 'G', enharmonics: ['Abb', 'F##', 'G'] },
+  { canonical: 'Ab', enharmonics: ['Ab', 'G#'] },
+  { canonical: 'A', enharmonics: ['A', 'Bbb', 'G##'] },
+  { canonical: 'Bb', enharmonics: ['A#', 'Bb', 'Cbb'] },
+  { canonical: 'B', enharmonics: ['A##', 'B', 'Cb'] },
+]
 
 class StatementBlock {
   constructor(statements) {
@@ -1569,7 +1704,7 @@ let blockDefinitions = {
       ]
     },
     tree: function() {
-      return new ExpressionScale(this.getFieldValue('value'));
+      return new ExpressionScale(parseInt(this.getFieldValue('value')));
     }
   },
   real: {
@@ -3079,6 +3214,10 @@ function setup() {
     interpret();
   });
 
+  document.getElementById('exportButton').addEventListener('click', () => {
+    exportMusicXML();
+  });
+
   let last = localStorage.getItem('last');
   if (last) {
     last = Blockly.Xml.textToDom(last);
@@ -3433,6 +3572,7 @@ function interpret() {
     let env = {
       isChord: false,
       root: 0,
+      rotation: 0,
       scale: 0,
       iMeasure: 2,
       beats: 0,
@@ -3455,6 +3595,8 @@ function interpret() {
         return this.sequences[this.sequences.length - 1].push(item);
       },
     };
+
+    setKeySignature(env, 0, 0, 0);
     program.evaluate(env);
 
     if (env.sequences[0].items.length > 0) {
@@ -3517,6 +3659,22 @@ function pasteWorkspace() {
     .catch(error => {
       console.log('error:', error);
     });
+}
+
+function exportMusicXML() {
+  let xml = document.getElementById('scratch').value;
+
+  let tag = document.createElement('a');
+  tag.style.display = 'none';
+  document.body.appendChild(tag);
+
+  tag.href = URL.createObjectURL(new Blob([xml], {type: 'application/vnd.recordare.musicxml+xml'}));
+  tag.setAttribute('download', 'deltaphone.xml');
+  tag.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(tag.href);
+    document.body.removeChild(tag);
+  });
 }
 
 window.addEventListener('load', setup);
