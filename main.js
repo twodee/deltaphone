@@ -3218,12 +3218,47 @@ function setup() {
     exportMusicXML();
   });
 
-  let last = localStorage.getItem('last');
-  if (last) {
-    last = Blockly.Xml.textToDom(last);
-    console.log("last:", last);
-    Blockly.Xml.domToWorkspace(last, workspace);
+  console.log("source0:", source0);
+  if (source0) {
+    let xml = Blockly.Xml.textToDom(source0);
+    console.log(xml);
+    Blockly.Xml.domToWorkspace(xml, workspace);
+    $('#left').css({
+      'min-width': '300px',
+      'width': '300px'
+    });
+    Blockly.svgResize(workspace);
+    workspace.zoomToFit();
+  } else {
+    let last = localStorage.getItem('last');
+    if (last) {
+      last = Blockly.Xml.textToDom(last);
+      console.log("last:", last);
+      Blockly.Xml.domToWorkspace(last, workspace);
+    }
   }
+
+$('#blocklyEditor clipPath[id^="blocklyZoomresetClipPath"] + image').each(function() {
+
+  // The reset control DOM has this structure:
+  //   svg
+  //     clipPath id=blocklyZoomresetClipPath...
+  //       rect
+  //     image
+  // The image has the mousedown event.
+
+  Blockly.bindEventWithChecks_(this, 'mousedown', null, function(e) {
+    workspace.markFocused();
+    workspace.beginCanvasTransition();
+    workspace.zoomToFit();
+    setTimeout(function() {
+      workspace.endCanvasTransition();
+    }, 500);
+    Blockly.Touch.clearTouchIdentifier();  // Don't block future drags.
+    e.stopPropagation();  // Don't start a workspace scroll.
+    e.preventDefault();  // Stop double-clicking from selecting text.
+  });
+});
 
   $('#score').alphaTab({
     width: -1,
