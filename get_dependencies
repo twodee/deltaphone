@@ -1,13 +1,13 @@
 #!/bin/sh
 
-# git clone https://github.com/CoderLine/alphaTab.git
-# git clone https://github.com/google/blockly.git
+git clone https://github.com/CoderLine/alphaTab.git
+git clone https://github.com/google/blockly.git
 
-zip="GeneralUser_GS_1.471.zip"
-dir="GeneralUser GS 1.471"
-sf="GeneralUser GS v1.471.sf2"
+# zip="GeneralUser_GS_1.471.zip"
+# dir="GeneralUser GS 1.471"
+# sf="GeneralUser GS v1.471.sf2"
 
 # curl -L -o general_user.zip https://www.dropbox.com/s/4x27l49kxcwamp5/$zip?dl=1
-unzip general_user.zip
-mv "$dir/$sf" general_user.sf2
-rm -rf general_user.zip "$dir"
+# unzip general_user.zip
+# mv "$dir/$sf" general_user.sf2
+# rm -rf general_user.zip "$dir"
