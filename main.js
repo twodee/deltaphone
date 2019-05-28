@@ -82,6 +82,30 @@ let deltaUnits = [
   ['halfsteps', '1'],
 ];
 
+let IntervalName = Object.freeze({
+  Unison: { label: 'unison', value: 0 },
+  Second: { label: '2nd', value: 2 },
+  Third: { label: '3rd', value: 4 },
+  Fourth: { label: '4th', value: 5 },
+  Fifth: { label: '5th', value: 7 },
+  Sixth: { label: '6th', value: 9 },
+  Seventh: { label: '7th', value: 11 },
+  Octave: { label: '8th', value: 12 },
+});
+
+let IntervalDirection = Object.freeze({
+  Up: { label: 'up', value: 1 },
+  Down: { label: 'down', value: -1 },
+});
+
+let IntervalQuality = Object.freeze({
+  Perfect: { label: 'perfect', value: 0 },
+  Major: { label: 'major', value: 1 },
+  Minor: { label: 'minor', value: 2 },
+  Diminished: { label: 'diminished', value: 3 },
+  Augmented: { label: 'augmented', value: 4 },
+});
+
 let deltas = [
   ['+12', '+12'],
   ['+11', '+11'],
@@ -116,55 +140,6 @@ class Song {
   }
 
   toXML(env) {
-    // let nfifths = 0;
-    // let flag;
-
-    // if (env.scale == 0) {
-      // flag = env.root;
-    // } else {
-      // flag = (env.root + 3);
-    // }
-
-    // switch (flag % 12) {
-      // case 0:
-        // nfifths = 0;
-        // break;
-      // case 1:
-        // nfifths = 7;
-        // break;
-      // case 2:
-        // nfifths = 2;
-        // break;
-      // case 3:
-        // nfifths = -3;
-        // break;
-      // case 4:
-        // nfifths = 4;
-        // break;
-      // case 5:
-        // nfifths = -1;
-        // break;
-      // case 6:
-        // nfifths = 6;
-        // break;
-      // case 7:
-        // nfifths = 1;
-        // break;
-      // case 8:
-        // nfifths = -4;
-        // break;
-      // case 9:
-        // nfifths = 3;
-        // break;
-      // case 10:
-        // nfifths = -2;
-        // break;
-      // case 11:
-        // nfifths = 5;
-        // break;
-    // }
-    // nfifths = 7;
-
     let xml = '';
     xml  = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
     xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
@@ -189,7 +164,6 @@ class Song {
     xml += '        <divisions>8</divisions>\n';
     xml += '        <key>\n';
     xml += '          <fifths>' + env.nfifths + '</fifths>\n';
-    // xml += '          <mode>' + 'ionian' + '</mode>\n';
     xml += '        </key>\n';
     xml += '        <time>\n';
     xml += '          <beats>' + env.beatsPerMeasure + '</beats>\n';
@@ -220,6 +194,7 @@ class Song {
 class Sequence {
   constructor() {
     this.items = [];
+    this.block = block;
   }
 
   toXML(env) {
@@ -421,7 +396,7 @@ class Chord {
 }
 
 class Note {
-  constructor(id, duration) {
+  constructor(id, duration, block) {
     this.id = id;
     this.isDotted = duration < 0;
     this.duration = Math.abs(duration);
@@ -429,6 +404,7 @@ class Note {
     this.isFirstNote = false;
     this.isLastNote = false;
     this.isMiddleNote = false;
+    this.block = block;
   }
 
   toXML(env) {
@@ -443,6 +419,10 @@ class Note {
       if (this.isDotted) {
         // 4 -> 4 / 4 + 4 / (4 * 2) -> 1 + 0.5
         env.beats += 4 / (this.duration * 2);
+      }
+
+      if (env.beats > env.beatsPerMeasure) {
+        throw new RuntimeException(this.block, 'This note doesn\'t fit in the measure.');
       }
     }
 
@@ -520,8 +500,9 @@ class Note {
 }
 
 class Rest {
-  constructor(duration) {
+  constructor(duration, block) {
     this.duration = duration;
+    this.block = block;
   }
 
   toXML(env) {
@@ -531,6 +512,9 @@ class Rest {
       env.beats = 0;
     }
     env.beats += 4 / this.duration;
+    if (env.beats > env.beatsPerMeasure) {
+      throw new RuntimeException(this.block, 'This rest doesn\'t fit in the measure.');
+    }
     xml += '<note><rest measure="yes"/><duration>' + this.duration + '</duration></note>\n';
     return xml;
   }
@@ -589,6 +573,46 @@ class ExpressionPosition {
 
   evaluate(env) {
     env.halfstep = 12 * this.octave.evaluate(env).toInteger() + this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
+    return new ExpressionInteger(env.halfstep);
+  }
+}
+
+class ExpressionInterval {
+  constructor(quality, name, direction, block) {
+    this.quality = quality;
+    this.name = name;
+    this.direction = direction;
+    this.block = block;
+  }
+
+  evaluate(env) {
+    let qualityValue = enumByValue(IntervalQuality, this.quality.evaluate(env).toInteger());
+    let nameValue = enumByValue(IntervalName, this.name.evaluate(env).toInteger());
+    let directionValue = enumByValue(IntervalDirection, this.direction.evaluate(env).toInteger());
+    let jump = nameValue.value;
+
+    if (qualityValue == IntervalQuality.Perfect) {
+      if (nameValue != IntervalName.Unison &&
+          nameValue != IntervalName.Fourth &&
+          nameValue != IntervalName.Fifth &&
+          nameValue != IntervalName.Octave) {
+        throw new RuntimeException(this.block, `You asked for a perfect ${nameValue.label}, but there's no such thing as a perfect ${nameValue.label}. Only unison, 4th, 5th, and octave intervals can be perfect.`);
+      }
+    } else if (qualityValue == IntervalQuality.Major || qualityValue == IntervalQuality.Minor) {
+      if (nameValue != IntervalName.Second &&
+          nameValue != IntervalName.Third &&
+          nameValue != IntervalName.Sixth &&
+          nameValue != IntervalName.Seventh) {
+        throw new RuntimeException(this.block, `You asked for a ${qualityValue.label} ${nameValue.label}, but there's no such thing as a ${qualityValue.label} ${nameValue.label}. Only 2nd, 3rd, 6th, and 7th intervals can be ${qualityValue.label}.`);
+      }
+    } else if (qualityValue == IntervalQuality.Diminished) {
+      jump -= 1;
+    } else if (qualityValue == IntervalQuality.Augmented) {
+      jump += 1;
+    }
+
+    env.halfstep += jump * directionValue.value;
+
     return new ExpressionInteger(env.halfstep);
   }
 }
@@ -888,7 +912,7 @@ class StatementRest {
 
   evaluate(env) {
     let durationValue = this.duration.evaluate(env).toInteger();
-    env.emit(new Rest(durationValue));
+    env.emit(new Rest(durationValue, this));
   }
 }
 
@@ -1333,22 +1357,39 @@ class StatementPlayRelative {
   evaluate(env) {
     let id = new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env).toInteger();
     let durationValue = this.duration.evaluate(env).toInteger();
-    env.emit(new Note(id, durationValue));
+    env.emit(new Note(id, durationValue, this.block));
+  }
+}
+
+class StatementPlayInterval {
+  constructor(quality, name, direction, duration, block) {
+    this.quality = quality;
+    this.name = name;
+    this.direction = direction;
+    this.duration = duration;
+    this.block = block;
+  }
+
+  evaluate(env) {
+    let id = new ExpressionInterval(this.quality, this.name, this.direction, this.block).evaluate(env).toInteger();
+    let durationValue = this.duration.evaluate(env).toInteger();
+    env.emit(new Note(id, durationValue, this.block));
   }
 }
 
 class StatementPlayAbsolute {
-  constructor(letter, accidental, octave, duration) {
+  constructor(letter, accidental, octave, duration, block) {
     this.letter = letter;
     this.accidental = accidental;
     this.octave = octave;
     this.duration = duration;
+    this.block = block;
   }
 
   evaluate(env) {
     let id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
     let durationValue = this.duration.evaluate(env).toInteger();
-    env.emit(new Note(id, durationValue));
+    env.emit(new Note(id, durationValue, this.block));
   }
 }
 
@@ -1361,6 +1402,20 @@ class StatementJumpRelative {
 
   evaluate(env) {
     let id = new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env).toInteger();
+    env.halfstep = id;
+  }
+}
+
+class StatementJumpInterval {
+  constructor(quality, name, direction, block) {
+    this.quality = quality;
+    this.name = name;
+    this.direction = direction;
+    this.block = block;
+  }
+
+  evaluate(env) {
+    let id = new ExpressionInterval(this.quality, this.name, this.direction, this.block).evaluate(env).toInteger();
     env.halfstep = id;
   }
 }
@@ -1379,18 +1434,19 @@ class StatementJumpAbsolute {
 }
 
 class StatementPlay {
-  constructor(note, duration) {
+  constructor(note, duration, block) {
     this.note = note;
     this.duration = duration;
+    this.block = block;
   }
 
   evaluate(env) {
     let durationValue = this.duration.evaluate(env).toInteger();
     let ids = this.note.evaluate(env);
     if (Array.isArray(ids)) {
-      env.emit(new Chord(ids.map(id => new Note(id, durationValue))));
+      env.emit(new Chord(ids.map(id => new Note(id, durationValue, this.block))));
     } else {
-      env.emit(new Note(ids, durationValue));
+      env.emit(new Note(ids, durationValue, this.block));
     }
   }
 }
@@ -1439,6 +1495,14 @@ function breakMeasure(env) {
   ++env.iMeasure;
 
   return xml;
+}
+
+function enumByValue(enumeration, value) {
+  return Object.values(enumeration).find(element => element.value == value);
+}
+
+function enumToOptions(enumeration) {
+  return Object.getOwnPropertyNames(enumeration).map(key => [enumeration[key].label, enumeration[key].value.toString()]);
 }
 
 function childToTree(identifier) {
@@ -1584,6 +1648,25 @@ let blockDefinitions = {
       return new ExpressionDelta(childToTree.call(this, 'value'), childToTree.call(this, 'unit'), this);
     }
   },
+  interval: {
+    configuration: {
+      colour: expressionColor,
+      output: 'Interval',
+      inputsInline: true,
+      message0: 'interval %1 %2 %3',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'quality' },
+        { type: 'input_value', align: 'RIGHT', name: 'name' },
+        { type: 'input_value', align: 'RIGHT', name: 'direction' },
+      ]
+    },
+    tree: function() {
+      let quality = childToTree.call(this, 'quality');
+      let name = childToTree.call(this, 'name');
+      let direction = childToTree.call(this, 'direction');
+      return new ExpressionInterval(quality, name, direction, this);
+    }
+  },
   position: {
     configuration: {
       colour: expressionColor,
@@ -1705,6 +1788,45 @@ let blockDefinitions = {
     },
     tree: function() {
       return new ExpressionScale(parseInt(this.getFieldValue('value')));
+    }
+  },
+  intervalQuality: {
+    configuration: {
+      colour: expressionColor,
+      output: 'IntervalQuality',
+      message0: '%1',
+      args0: [
+        { type: 'field_dropdown', name: 'value', options: enumToOptions(IntervalQuality) },
+      ]
+    },
+    tree: function() {
+      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
+    }
+  },
+  intervalName: {
+    configuration: {
+      colour: expressionColor,
+      output: 'IntervalName',
+      message0: '%1',
+      args0: [
+        { type: 'field_dropdown', name: 'value', options: enumToOptions(IntervalName) },
+      ]
+    },
+    tree: function() {
+      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
+    }
+  },
+  intervalDirection: {
+    configuration: {
+      colour: expressionColor,
+      output: 'IntervalDirection',
+      message0: '%1',
+      args0: [
+        { type: 'field_dropdown', name: 'value', options: enumToOptions(IntervalDirection) },
+      ]
+    },
+    tree: function() {
+      return new ExpressionInteger(parseInt(this.getFieldValue('value')));
     }
   },
   real: {
@@ -1864,7 +1986,7 @@ let blockDefinitions = {
     tree: function() {
       let note = childToTree.call(this, 'note');
       let duration = childToTree.call(this, 'duration');
-      return new StatementPlay(note, duration);
+      return new StatementPlay(note, duration, this);
     }
   },
   jumpAbsolute: {
@@ -1894,12 +2016,34 @@ let blockDefinitions = {
       inputsInline: true,
       message0: 'jump %1 %2',
       args0: [
-        { type: 'input_value', align: 'RIGHT', name: 'deltaValue', check: ['DeltaValue', 'Integer']},
+        { type: 'input_value', align: 'RIGHT', name: 'deltaValue', check: ['Integer']},
         { type: 'input_value', align: 'RIGHT', name: 'deltaUnit', check: ['DeltaUnit']},
       ]
     },
     tree: function() {
       return new StatementJumpRelative(childToTree.call(this, 'deltaValue'), childToTree.call(this, 'deltaUnit'), this);
+    }
+  },
+  jumpInterval: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'jump %1 %2 %3',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'quality', check: 'IntervalQuality'},
+        { type: 'input_value', align: 'RIGHT', name: 'name', check: 'IntervalName'},
+        { type: 'input_value', align: 'RIGHT', name: 'direction', check: 'IntervalDirection'},
+      ]
+    },
+    tree: function() {
+      return new StatementJumpInterval(
+        childToTree.call(this, 'quality'),
+        childToTree.call(this, 'name'),
+        childToTree.call(this, 'direction'),
+        this
+      );
     }
   },
   playAbsolute: {
@@ -1920,7 +2064,8 @@ let blockDefinitions = {
       return new StatementPlayAbsolute(childToTree.call(this, 'letter'),
                                        childToTree.call(this, 'accidental'),
                                        childToTree.call(this, 'octave'),
-                                       childToTree.call(this, 'duration'));
+                                       childToTree.call(this, 'duration'),
+                                       this);
     }
   },
   playRelative: {
@@ -1931,13 +2076,37 @@ let blockDefinitions = {
       inputsInline: true,
       message0: 'play %1 %2 %3',
       args0: [
-        { type: 'input_value', align: 'RIGHT', name: 'deltaValue', check: ['DeltaValue', 'Integer']},
+        { type: 'input_value', align: 'RIGHT', name: 'deltaValue', check: ['Integer']},
         { type: 'input_value', align: 'RIGHT', name: 'deltaUnit', check: ['DeltaUnit']},
         { type: 'input_value', align: 'RIGHT', name: 'duration' },
       ]
     },
     tree: function() {
       return new StatementPlayRelative(childToTree.call(this, 'deltaValue'), childToTree.call(this, 'deltaUnit'), childToTree.call(this, 'duration'), this);
+    }
+  },
+  playInterval: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      inputsInline: true,
+      message0: 'play %1 %2 %3 %4',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'quality', check: 'IntervalQuality'},
+        { type: 'input_value', align: 'RIGHT', name: 'name', check: 'IntervalName'},
+        { type: 'input_value', align: 'RIGHT', name: 'direction', check: 'IntervalDirection'},
+        { type: 'input_value', align: 'RIGHT', name: 'duration' },
+      ]
+    },
+    tree: function() {
+      return new StatementPlayInterval(
+        childToTree.call(this, 'quality'),
+        childToTree.call(this, 'name'),
+        childToTree.call(this, 'direction'),
+        childToTree.call(this, 'duration'),
+        this
+      );
     }
   },
   rest: {
