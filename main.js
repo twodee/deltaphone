@@ -385,9 +385,10 @@ class Repeat {
 class Chord {
   constructor(notes) {
     this.notes = notes;
-    for (let note of notes.slice(1)) {
-      note.isChord = true;
-    }
+    this.notes.forEach((note, index) => {
+      note.chordIndex = index;
+      console.log("index:", index);
+    });
   }
 
   toXML(env) {
@@ -400,7 +401,7 @@ class Note {
     this.id = id;
     this.isDotted = duration < 0;
     this.duration = Math.abs(duration);
-    this.isChord = false;
+    this.chordIndex = -1;
     this.isFirstNote = false;
     this.isLastNote = false;
     this.isMiddleNote = false;
@@ -410,7 +411,7 @@ class Note {
   toXML(env) {
     let xml = '';
 
-    if (!this.isChord) {
+    if (this.chordIndex <= 0) {
       if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
         xml += breakMeasure(env);
         env.beats = 0;
@@ -422,7 +423,8 @@ class Note {
       }
 
       if (env.beats > env.beatsPerMeasure) {
-        throw new RuntimeException(this.block, 'This note doesn\'t fit in the measure.');
+        let thing = this.chordIndex >= 0 ? 'chord' : 'note';
+        throw new RuntimeException(this.block, `This ${thing} doesn't fit in the measure.`);
       }
     }
 
@@ -461,7 +463,7 @@ class Note {
     let d = Math.pow(2, 5 - exponent);
     xml += '<note><pitch><step>' + spelling[0] + '</step><alter>' + alter + '</alter><octave>' + octave + `</octave></pitch><duration>${d}</duration><type>` + durationToName(this.duration) + '</type>';
 
-    if (this.isChord) {
+    if (this.chordIndex > 0) {
       xml += '<chord/>';
     }
 
@@ -1444,7 +1446,7 @@ class StatementPlay {
     let durationValue = this.duration.evaluate(env).toInteger();
     let ids = this.note.evaluate(env);
     if (Array.isArray(ids)) {
-      env.emit(new Chord(ids.map(id => new Note(id, durationValue, this.block))));
+      env.emit(new Chord(ids.map((id, index) => new Note(id, durationValue, this.block))));
     } else {
       env.emit(new Note(ids, durationValue, this.block));
     }
@@ -3774,7 +3776,6 @@ function interpret() {
     let program = new StatementProgram(new StatementBlock(statements));
 
     let env = {
-      isChord: false,
       root: 0,
       rotation: 0,
       scale: 0,
