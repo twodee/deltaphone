@@ -607,8 +607,19 @@ class ExpressionInterval {
           nameValue != IntervalName.Seventh) {
         throw new RuntimeException(this.block, `You asked for a ${qualityValue.label} ${nameValue.label}, but there's no such thing as a ${qualityValue.label} ${nameValue.label}. Only 2nd, 3rd, 6th, and 7th intervals can be ${qualityValue.label}.`);
       }
+
+      // Minor intervals are down one halfstep from major.
+      if (qualityValue == IntervalQuality.Minor) {
+        jump -= 1;
+      }
     } else if (qualityValue == IntervalQuality.Diminished) {
       jump -= 1;
+      if (nameValue == IntervalName.Second ||
+          nameValue == IntervalName.Third ||
+          nameValue == IntervalName.Sixth ||
+          nameValue == IntervalName.Seventh) {
+        jump -= 1;
+      }
     } else if (qualityValue == IntervalQuality.Augmented) {
       jump += 1;
     }
@@ -3738,6 +3749,8 @@ function dumpXML() {
 }
 
 function interpret() {
+  $('#score').alphaTab('pause');
+
   // We must also check that the workspace is valid we may be trying to set the
   // warning text of disposed block.
   if (lastWarnedBlock && lastWarnedBlock.workspace) {
