@@ -3445,7 +3445,7 @@ $('#blocklyEditor clipPath[id^="blocklyZoomresetClipPath"] + image').each(functi
   $('#score').alphaTab({
     width: -1,
     staves: 'score',
-    displayTranspositionPitches: [12],
+    transpositionPitches: [12],
     layout: {
       mode: 'page',
       additionalSettings: {
