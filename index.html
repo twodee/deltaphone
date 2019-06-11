@@ -22,13 +22,13 @@
     <div id="blocklyEditor"></div>
   </div>
   <div id="right">
-    <div id="hud">
+    <div id="hud-top">
       <div id="progress-root">
         <div id="progress-bar"><div id="progress-child"></div></div>
         <div id="progress-label">Loading SoundFont...</div>
       </div>
       <div id="controls">
-        <input type="button" value="Scorify" id="scorifyButton">
+        <input type="button" value="Run" id="runButton">
         <input type="button" value="Play" id="playButton">
         <input type="button" value="Export" id="exportButton">
       </div>
@@ -36,13 +36,15 @@
     <div id="scoreRoot">
       <div id="score" data-player="general_user.sf2"></div>
     </div>
+    <div id="hud-bottom">
+    </div>
   </div>
 </div>
 
 <textarea id="scratch"></textarea>
 
 <xml id="toolbox">
-  <category name="Song">
+  <category name="Score">
     <block type="keySignature">
       <value name="letter">
         <block type="letter">
@@ -65,6 +67,28 @@
       <value name="speed">
         <block type="integer">
           <field name="value">80</field>
+        </block>
+      </value>
+    </block>
+  </category>
+  <category name="I/O">
+    <block type="playScore"></block>
+    <block type="playScoreAndWait"></block>
+    <block type="clearScore"></block>
+    <block type="hideScore"></block>
+    <block type="showScore"></block>
+    <block type="sleep">
+      <value name="seconds">
+        <block type="real">
+          <field name="value">1.5</field>
+        </block>
+      </value>
+    </block>
+    <block type="quiz"></block>
+    <block type="waitForButton">
+      <value name="message">
+        <block type="string">
+          <field name="value">message</field>
         </block>
       </value>
     </block>
@@ -299,8 +323,13 @@
       <mutation arity="1" else="true"></mutation>
     </block>
   </category>
+  <category name="List">
+    <block type="list"></block>
+    <block type="raffle"></block>
+  </category>
   <category name="Values">
     <block type="integer"></block>
+    <block type="string"></block>
     <block type="noteDuration">
       <field name="value">4</field>
     </block>

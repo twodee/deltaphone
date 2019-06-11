@@ -28,11 +28,33 @@ body {
   stroke: #0078ff;
 }
 
-#hud {
+#hud-top {
   position: absolute;
   left: 5px;
   top: 5px;
+  z-index: 5;
+}
+
+#hud-bottom {
+  position: absolute;
+  padding: 10px;
+  left: 5px;
+  bottom: 5px;
+  right: 5px;
+  border-radius: 5px;
+  border: 1px solid rgb(190, 190, 190);
   z-index: 1;
+  background-color: #ceeaff;
+  display: none;
+}
+
+p {
+  margin-top: 0;
+  font-family: sans-serif;
+}
+
+#hud-bottom p:last-of-type {
+  margin-bottom: 0;
 }
 
 #blocklyEditor {

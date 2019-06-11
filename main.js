@@ -4,6 +4,7 @@ let expressionColor = 270;
 let statementColor = 180;
 let parameterColor = 330;
 let lastWarnedBlock = null;
+let hasManualInterpretation = false;
 let scoreRoot;
 
 let letters = [
@@ -387,7 +388,6 @@ class Chord {
     this.notes = notes;
     this.notes.forEach((note, index) => {
       note.chordIndex = index;
-      console.log("index:", index);
     });
   }
 
@@ -527,7 +527,7 @@ class ExpressionBoolean {
     this.value = value;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     return this;
   }
 
@@ -549,7 +549,7 @@ class ExpressionInteger {
     this.value = value;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     return this;
   }
 
@@ -557,8 +557,26 @@ class ExpressionInteger {
     return this.value;
   }
 
+  toReal() {
+    return this.value;
+  }
+
   toBoolean() {
     return this.value == 0 ? false : true;
+  }
+
+  toString() {
+    return '' + this.value;
+  }
+}
+
+class ExpressionString {
+  constructor(value) {
+    this.value = value;
+  }
+
+  async evaluate(env) {
+    return this;
   }
 
   toString() {
@@ -573,9 +591,12 @@ class ExpressionPosition {
     this.octave = octave;
   }
 
-  evaluate(env) {
-    env.halfstep = 12 * this.octave.evaluate(env).toInteger() + this.letter.evaluate(env).toInteger() + this.accidental.evaluate(env).toInteger();
-    return new ExpressionInteger(env.halfstep);
+  async evaluate(env) {
+    let octaveValue = (await this.octave.evaluate(env)).toInteger();
+    let letterValue = (await this.letter.evaluate(env)).toInteger();
+    let accidentalValue = (await this.accidental.evaluate(env)).toInteger();
+    let halfstep = 12 * octaveValue + letterValue + accidentalValue;
+    return new PrimitivePosition(letterValue, accidentalValue, octaveValue, halfstep);
   }
 }
 
@@ -587,10 +608,10 @@ class ExpressionInterval {
     this.block = block;
   }
 
-  evaluate(env) {
-    let qualityValue = enumByValue(IntervalQuality, this.quality.evaluate(env).toInteger());
-    let nameValue = enumByValue(IntervalName, this.name.evaluate(env).toInteger());
-    let directionValue = enumByValue(IntervalDirection, this.direction.evaluate(env).toInteger());
+  async evaluate(env) {
+    let qualityValue = enumByValue(IntervalQuality, (await this.quality.evaluate(env)).toInteger());
+    let nameValue = enumByValue(IntervalName, (await this.name.evaluate(env)).toInteger());
+    let directionValue = enumByValue(IntervalDirection, (await this.direction.evaluate(env)).toInteger());
     let jump = nameValue.value;
 
     if (qualityValue == IntervalQuality.Perfect) {
@@ -624,9 +645,71 @@ class ExpressionInterval {
       jump += 1;
     }
 
-    env.halfstep += jump * directionValue.value;
+    // env.halfstep += jump * directionValue.value;
 
-    return new ExpressionInteger(env.halfstep);
+    return new PrimitiveInterval(qualityValue, nameValue, directionValue, env.halfstep + jump * directionValue.value);
+  }
+}
+
+class PrimitivePosition {
+  constructor(letter, accidental, octave, halfstep) {
+    this.letter = letter;
+    this.accidental = accidental;
+    this.octave = octave;
+    this.halfstep = halfstep;
+  }
+
+  async evaluate(env) {
+    return this;
+  }
+
+  toString() {
+    return `${this.note} ${this.accidental} ${this.octave}`;
+  }
+
+  toInteger() {
+    return this.halfstep;
+  }
+}
+
+class PrimitiveDelta {
+  constructor(delta, unit, halfstep) {
+    this.delta = delta;
+    this.unit = unit;
+    this.halfstep = halfstep;
+  }
+
+  async evaluate(env) {
+    return this;
+  }
+
+  toString() {
+    return `${this.delta} ${this.unit}`;
+  }
+
+  toInteger() {
+    return this.halfstep;
+  }
+}
+
+class PrimitiveInterval {
+  constructor(quality, name, direction, halfstep) {
+    this.quality = quality;
+    this.name = name;
+    this.direction = direction;
+    this.halfstep = halfstep;
+  }
+
+  async evaluate(env) {
+    return this;
+  }
+
+  toString() {
+    return `${this.quality.label} ${this.name.label} ${this.direction.label}`;
+  }
+
+  toInteger() {
+    return this.halfstep;
   }
 }
 
@@ -637,9 +720,10 @@ class ExpressionDelta {
     this.block = block;
   }
 
-  evaluate(env) {
-    let value = this.deltaValue.evaluate(env).toInteger();
+  async evaluate(env) {
+    let value = (await this.deltaValue.evaluate(env)).toInteger();
     let jump;
+
     if (this.deltaUnit.value == 1) {
       jump = value;
     } else {
@@ -666,8 +750,8 @@ class ExpressionDelta {
         }
       }
     }
-    env.halfstep += jump;
-    return new ExpressionInteger(env.halfstep);
+
+    return new PrimitiveDelta(value, this.deltaUnit.value, env.halfstep + jump);
   }
 }
 
@@ -676,7 +760,7 @@ class ExpressionScale {
     this.value = value;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     return this;
   }
 
@@ -691,9 +775,9 @@ class ExpressionAdd {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionInteger(valueA + valueB);
   }
 }
@@ -704,9 +788,9 @@ class ExpressionSubtract {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionInteger(valueA - valueB);
   }
 }
@@ -717,9 +801,9 @@ class ExpressionMultiply {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionInteger(valueA * valueB);
   }
 }
@@ -730,9 +814,9 @@ class ExpressionDivide {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionInteger(Math.floor(valueA / valueB));
   }
 }
@@ -743,9 +827,9 @@ class ExpressionRemainder {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionInteger(valueA % valueB);
   }
 }
@@ -756,9 +840,9 @@ class ExpressionPower {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionInteger(Math.pow(valueA, valueB));
   }
 }
@@ -771,9 +855,9 @@ class ExpressionLess {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionBoolean(valueA < valueB);
   }
 }
@@ -784,9 +868,9 @@ class ExpressionLessEqual {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionBoolean(valueA <= valueB);
   }
 }
@@ -797,9 +881,9 @@ class ExpressionMore {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionBoolean(valueA > valueB);
   }
 }
@@ -810,9 +894,9 @@ class ExpressionMoreEqual {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionBoolean(valueA >= valueB);
   }
 }
@@ -823,9 +907,9 @@ class ExpressionEqual {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionBoolean(valueA == valueB);
   }
 }
@@ -836,9 +920,9 @@ class ExpressionNotEqual {
     this.b = b;
   }
 
-  evaluate(env) {
-    let valueA = this.a.evaluate(env).toInteger();
-    let valueB = this.b.evaluate(env).toInteger();
+  async evaluate(env) {
+    let valueA = (await this.a.evaluate(env)).toInteger();
+    let valueB = (await this.b.evaluate(env)).toInteger();
     return new ExpressionBoolean(valueA != valueB);
   }
 }
@@ -851,9 +935,9 @@ class ExpressionRandom {
     this.max = max;
   }
 
-  evaluate(env) {
-    let minValue = this.min.evaluate(env).toInteger();
-    let maxValue = this.max.evaluate(env).toInteger();
+  async evaluate(env) {
+    let minValue = (await this.min.evaluate(env)).toInteger();
+    let maxValue = (await this.max.evaluate(env)).toInteger();
     return new ExpressionInteger(Math.floor(Math.random() * (maxValue - minValue + 1)) + minValue);
   }
 }
@@ -863,7 +947,7 @@ class ExpressionReal {
     this.value = value;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     return this;
   }
 
@@ -876,15 +960,58 @@ class ExpressionReal {
   }
 }
 
+class ExpressionRaffle {
+  constructor(collection) {
+    this.collection = collection;
+  }
+
+  async evaluate(env) {
+    let collectionValue = await this.collection.evaluate(env);
+    let i = Math.floor(Math.random() * collectionValue.size());
+    return collectionValue.get(i);
+  }
+}
+
+class ExpressionList {
+  constructor(elements) {
+    this.elements = elements;
+  }
+
+  async evaluate(env) {
+    let newElements = [];
+    for (let i = 0; i < this.elements.length; ++i) {
+      newElements[i] = await this.elements[i].evaluate(env);
+    }
+    return new ExpressionList(newElements);
+  }
+
+  size() {
+    return this.elements.length;
+  }
+
+  get(i) {
+    return this.elements[i];
+  }
+
+  toString() {
+    return this.elements.toString();
+  }
+}
+
 class ExpressionChord {
   constructor(notes) {
     this.notes = notes;
   }
 
-  evaluate(env) {
-    let ids = this.notes.map(note => note.evaluate(env).toInteger());
+  async evaluate(env) {
+    let ids = [];
+    for (let i = 0; i < this.notes.length; ++i) {
+      let note = await this.notes[i].evaluate(env);
+      env.halfstep = note.toInteger();
+      ids.push(note);
+    }
     if (ids.length > 0) {
-      env.halfstep = ids[0];
+      env.halfstep = ids[0].toInteger();
     }
     return ids;
   }
@@ -913,8 +1040,8 @@ class StatementPrint {
     this.message = message;
   }
 
-  evaluate(env) {
-    console.log(this.message.evaluate(env).toString());
+  async evaluate(env) {
+    console.log((await this.message.evaluate(env)).toString());
   }
 }
 
@@ -923,8 +1050,8 @@ class StatementRest {
     this.duration = duration;
   }
 
-  evaluate(env) {
-    let durationValue = this.duration.evaluate(env).toInteger();
+  async evaluate(env) {
+    let durationValue = (await this.duration.evaluate(env)).toInteger();
     env.emit(new Rest(durationValue, this));
   }
 }
@@ -933,7 +1060,7 @@ class StatementReroot {
   constructor() {
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.root = env.halfstep % 12;
   }
 }
@@ -942,7 +1069,7 @@ class StatementMark {
   constructor() {
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.marks.push(env.halfstep);
   }
 }
@@ -951,7 +1078,7 @@ class StatementBack {
   constructor() {
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.halfstep = env.marks[env.marks.length - 1];
   }
 }
@@ -960,18 +1087,25 @@ class StatementUnmark {
   constructor() {
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.marks.pop();
   }
 }
 
 class StatementBeatsPerMinute {
-  constructor(beatsPerMinute) {
+  constructor(beatsPerMinute, block) {
     this.beatsPerMinute = beatsPerMinute;
+    this.block = block;
   }
 
-  evaluate(env) {
-    env.bpm = this.beatsPerMinute.evaluate(env).toInteger();
+  async evaluate(env) {
+    let bpm = (await this.beatsPerMinute.evaluate(env)).toInteger();
+    if (bpm < 15) {
+      throw new RuntimeException(this.block, `Whoa. ${bpm} beats per minute is too slow.`);
+    } else if (bpm > 960) {
+      throw new RuntimeException(this.block, `Whoa. ${bpm} beats per minute is too fast.`);
+    }
+    env.bpm = bpm;
   }
 }
 
@@ -981,7 +1115,7 @@ class StatementTimeSignature {
     this.beatNote = beatNote;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.beatsPerMeasure = this.beatsPerMeasure;
     env.beatNote = this.beatNote;
   }
@@ -994,10 +1128,10 @@ class StatementKeySignature {
     this.scale = scale;
   }
 
-  evaluate(env) {
-    let letterOffset = this.letter.evaluate(env).toInteger();
-    let accidentalOffset = this.accidental.evaluate(env).toInteger();
-    let scale = this.scale.evaluate(env).toInteger();
+  async evaluate(env) {
+    let letterOffset = (await this.letter.evaluate(env)).toInteger();
+    let accidentalOffset = (await this.accidental.evaluate(env)).toInteger();
+    let scale = (await this.scale.evaluate(env)).toInteger();
     setKeySignature(env, letterOffset, accidentalOffset);
   }
 }
@@ -1107,9 +1241,9 @@ class StatementBlock {
     this.statements = statements;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     for (let statement of this.statements) {
-      statement.evaluate(env);
+      await statement.evaluate(env);
     }
   }
 }
@@ -1119,9 +1253,9 @@ class StatementProgram {
     this.block = block;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.push(new Song());
-    this.block.evaluate(env);
+    await this.block.evaluate(env);
   }
 }
 
@@ -1130,7 +1264,7 @@ class StatementGet {
     this.identifier = identifier;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     return env.variables[this.identifier].value;
   }
 }
@@ -1140,21 +1274,22 @@ class StatementReturn {
     this.value = value;
   }
 
-  evaluate(env) {
-    throw new Return(this.value.evaluate(env));
+  async evaluate(env) {
+    throw new Return(await this.value.evaluate(env));
   }
 }
 
 class StatementSet {
-  constructor(identifier, value) {
+  constructor(identifier, rhs) {
     this.identifier = identifier;
-    this.value = value;
+    this.rhs = rhs;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
+    let rhsValue = await this.rhs.evaluate(env);
     env.variables[this.identifier] = {
       identifier: this.identifier,
-      value: this.value,
+      value: rhsValue,
     };
   }
 }
@@ -1166,7 +1301,7 @@ class StatementTo {
     this.body = body;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.functions[this.identifier] = {
       identifier: this.identifier,
       parameters: this.parameters,
@@ -1180,8 +1315,8 @@ class StatementVariableGetter {
     this.identifier = identifier;
   }
 
-  evaluate(env) {
-    return env.variables[this.identifier].value.evaluate(env);
+  async evaluate(env) {
+    return await env.variables[this.identifier].value.evaluate(env);
   }
 }
 
@@ -1191,12 +1326,12 @@ class StatementCall {
     this.actualParameters = actualParameters;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     let localVariables = {};
     for (let actualParameter of this.actualParameters) {
       let value;
       if (actualParameter.mode == 'value') {
-        value = actualParameter.expression.evaluate(env);
+        value = await actualParameter.expression.evaluate(env);
       } else {
         value = actualParameter.expression;
       }
@@ -1213,7 +1348,7 @@ class StatementCall {
 
     let result;
     try {
-      result = body.evaluate(env);
+      result = await body.evaluate(env);
     } catch (e) {
       if (e instanceof Return) {
         result = e.value;
@@ -1239,14 +1374,14 @@ class StatementForRange {
     this.block = block;
   }
 
-  evaluate(env) {
-    let start = this.lo.evaluate(env).toInteger();
-    let stop = this.hi.evaluate(env).toInteger();
+  async evaluate(env) {
+    let start = (await this.lo.evaluate(env)).toInteger();
+    let stop = (await this.hi.evaluate(env)).toInteger();
     if (!this.isInclusive) {
       stop -= 1;
     }
 
-    let delta = this.by.evaluate(env).toInteger();
+    let delta = (await this.by.evaluate(env)).toInteger();
 
     if (delta == 0 ||
         (delta > 0 && stop < start) ||
@@ -1259,7 +1394,7 @@ class StatementForRange {
         identifier: this.identifier,
         value: new ExpressionInteger(i),
       };
-      this.body.evaluate(env);
+      await this.body.evaluate(env);
     }
   }
 }
@@ -1271,16 +1406,16 @@ class StatementIf {
     this.elseBody = elseBody;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     for (let [i, condition] of this.conditions.entries()) {
-      if (condition.evaluate(env).toBoolean()) {
-        this.thenBodies[i].evaluate(env);
+      if ((await condition.evaluate(env)).toBoolean()) {
+        await this.thenBodies[i].evaluate(env);
         return;
       }
     }
 
     if (this.elseBody) {
-      this.elseBody.evaluate(env);
+      await this.elseBody.evaluate(env);
     }
   }
 }
@@ -1290,11 +1425,141 @@ class StatementRepeat {
     this.block = block;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.push(new Repeat());
-    this.block.evaluate(env);
+    await this.block.evaluate(env);
     let sequence = env.pop();
     env.emit(sequence);
+  }
+}
+
+class StatementSleep {
+  constructor(block, seconds) {
+    this.block = block;
+    this.seconds = seconds;
+  }
+
+  async evaluate(env) {
+    let secondsValue = (await this.seconds.evaluate(env)).toReal();
+    await new Promise(resolve => setTimeout(resolve, secondsValue * 1000));
+  }
+}
+
+class StatementPlayScore {
+  constructor(block) {
+    this.block = block;
+  }
+
+  async evaluate(env) {
+    generateScore(env);
+    $('#score').alphaTab('playPause');
+  }
+}
+
+class StatementPlayScoreAndWait {
+  constructor(block) {
+    this.block = block;
+  }
+
+  async evaluate(env) {
+    generateScore(env);
+    $('#score').alphaTab('playPause');
+    await new Promise(resolve => $('#score').on('alphaTab.finished', () => {
+      resolve();
+    }));
+  }
+}
+
+class StatementClearScore {
+  constructor(block) {
+    this.block = block;
+  }
+
+  async evaluate(env) {
+    env.beats = 0;
+    env.sequences = [new Song()];
+    env.iMeasure = 0;
+  }
+}
+
+class StatementShowScore {
+  constructor(block) {
+    this.block = block;
+  }
+
+  async evaluate(env) {
+    $('#score').show();
+  }
+}
+
+class StatementHideScore {
+  constructor(block) {
+    this.block = block;
+  }
+
+  async evaluate(env) {
+    $('#score').hide();
+  }
+}
+
+class StatementQuiz {
+  constructor(block, message, answer, choices) {
+    this.block = block;
+    this.message = message;
+    this.answer = answer;
+    this.choices = choices;
+  }
+
+  async evaluate(env) {
+    let choiceValues = (await this.choices.evaluate(env)).elements;
+    let answerValue = await this.answer.evaluate(env);
+    let messageValue = await this.message.evaluate(env);
+
+    $('#hud-bottom').html(`<p>${messageValue}</p>`);
+
+    let select = $(`<select size="${choiceValues.length}" />`).append(choiceValues.map(choice => `<option>${choice.toString()}</option>`));
+    let p = $('<p />').append(select);
+    $('#hud-bottom').append(p);
+
+    let checkButton = $('<p><button>Check</button> <span id="feedback-label"></span></p>');
+    $('#hud-bottom').append(checkButton);
+
+    $('#hud-bottom').slideDown(500);
+    await new Promise(resolve => {
+      checkButton.click(() => {
+        let selectedIndex = $(select)[0].selectedIndex;
+        if (choiceValues[selectedIndex] == answerValue) {
+          $('#feedback-label').html(`That's right!`);
+          setTimeout(() => {
+            $('#hud-bottom').slideUp(500, () => resolve());
+          }, 500);
+        } else {
+          $('#feedback-label').html(`Nope, it's not ${choiceValues[selectedIndex].toString()}. Try again.`);
+        }
+      });
+    });
+  }
+}
+
+class StatementWaitForClick {
+  constructor(block, message) {
+    this.block = block;
+    this.message = message;
+  }
+
+  async evaluate(env) {
+    let messageValue = (await this.message.evaluate(env)).toString();
+
+    $('#hud-bottom').empty();
+    let button = $(`<p><button>${messageValue}</button></p>`);
+    $('#hud-bottom').append(button);
+
+    $('#hud-bottom').slideDown();
+    await new Promise(resolve => {
+      button.click(() => {
+        $('#hud-bottom').slideUp(500, () => resolve());
+      });
+    });
   }
 }
 
@@ -1303,9 +1568,9 @@ class StatementSlur {
     this.block = block;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.push(new Slur());
-    this.block.evaluate(env);
+    await this.block.evaluate(env);
     let sequence = env.pop();
     env.emit(sequence);
   }
@@ -1317,10 +1582,10 @@ class StatementX {
     this.block = block;
   }
 
-  evaluate(env) {
-    let n = this.count.evaluate(env).toInteger();
+  async evaluate(env) {
+    let n = (await this.count.evaluate(env)).toInteger();
     for (let i = 0; i < n; ++i) {
-      this.block.evaluate(env);
+      await this.block.evaluate(env);
     }
   }
 }
@@ -1332,17 +1597,17 @@ class StatementRepeat12 {
     this.second = second;
   }
 
-  evaluate(env) {
+  async evaluate(env) {
     env.push(new Sequence());
-    this.common.evaluate(env);
+    await this.common.evaluate(env);
     let commonSequence = env.pop();
 
     env.push(new Sequence());
-    this.first.evaluate(env);
+    await this.first.evaluate(env);
     let firstEndingSequence = env.pop();
 
     env.push(new Sequence());
-    this.second.evaluate(env);
+    await this.second.evaluate(env);
     let secondEndingSequence = env.pop();
 
     env.emit(new Repeat12(commonSequence, firstEndingSequence, secondEndingSequence));
@@ -1354,8 +1619,8 @@ class StatementJump {
     this.note = note;
   }
 
-  evaluate(env) {
-    env.halfstep = this.note.evaluate(env).toInteger();
+  async evaluate(env) {
+    env.halfstep = (await this.note.evaluate(env)).toInteger();
   }
 }
 
@@ -1367,9 +1632,10 @@ class StatementPlayRelative {
     this.block = block;
   }
 
-  evaluate(env) {
-    let id = new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env).toInteger();
-    let durationValue = this.duration.evaluate(env).toInteger();
+  async evaluate(env) {
+    let id = (await new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env)).toInteger();
+    env.halfstep = id;
+    let durationValue = (await this.duration.evaluate(env)).toInteger();
     env.emit(new Note(id, durationValue, this.block));
   }
 }
@@ -1383,9 +1649,10 @@ class StatementPlayInterval {
     this.block = block;
   }
 
-  evaluate(env) {
-    let id = new ExpressionInterval(this.quality, this.name, this.direction, this.block).evaluate(env).toInteger();
-    let durationValue = this.duration.evaluate(env).toInteger();
+  async evaluate(env) {
+    let id = (await new ExpressionInterval(this.quality, this.name, this.direction, this.block).evaluate(env)).toInteger();
+    env.halfstep = id;
+    let durationValue = (await this.duration.evaluate(env)).toInteger();
     env.emit(new Note(id, durationValue, this.block));
   }
 }
@@ -1399,9 +1666,10 @@ class StatementPlayAbsolute {
     this.block = block;
   }
 
-  evaluate(env) {
-    let id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
-    let durationValue = this.duration.evaluate(env).toInteger();
+  async evaluate(env) {
+    let id = (await new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env)).toInteger();
+    env.halfstep = id;
+    let durationValue = (await this.duration.evaluate(env)).toInteger();
     env.emit(new Note(id, durationValue, this.block));
   }
 }
@@ -1413,8 +1681,8 @@ class StatementJumpRelative {
     this.block = block;
   }
 
-  evaluate(env) {
-    let id = new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env).toInteger();
+  async evaluate(env) {
+    let id = (await new ExpressionDelta(this.deltaValue, this.deltaUnit, this.block).evaluate(env)).toInteger();
     env.halfstep = id;
   }
 }
@@ -1427,8 +1695,8 @@ class StatementJumpInterval {
     this.block = block;
   }
 
-  evaluate(env) {
-    let id = new ExpressionInterval(this.quality, this.name, this.direction, this.block).evaluate(env).toInteger();
+  async evaluate(env) {
+    let id = (await new ExpressionInterval(this.quality, this.name, this.direction, this.block).evaluate(env)).toInteger();
     env.halfstep = id;
   }
 }
@@ -1440,8 +1708,8 @@ class StatementJumpAbsolute {
     this.octave = octave;
   }
 
-  evaluate(env) {
-    let id = new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env).toInteger();
+  async evaluate(env) {
+    let id = (await new ExpressionPosition(this.letter, this.accidental, this.octave).evaluate(env)).toInteger();
     env.halfstep = id;
   }
 }
@@ -1453,13 +1721,13 @@ class StatementPlay {
     this.block = block;
   }
 
-  evaluate(env) {
-    let durationValue = this.duration.evaluate(env).toInteger();
-    let ids = this.note.evaluate(env);
+  async evaluate(env) {
+    let durationValue = (await this.duration.evaluate(env)).toInteger();
+    let ids = await this.note.evaluate(env);
     if (Array.isArray(ids)) {
-      env.emit(new Chord(ids.map((id, index) => new Note(id, durationValue, this.block))));
+      env.emit(new Chord(ids.map((id, index) => new Note(id.toInteger(), durationValue, this.block))));
     } else {
-      env.emit(new Note(ids, durationValue, this.block));
+      env.emit(new Note(ids.toInteger(), durationValue, this.block));
     }
   }
 }
@@ -1540,6 +1808,19 @@ let blockDefinitions = {
     },
     tree: function() {
       return new ExpressionInteger(parseInt(this.getFieldValue('value')));
+    }
+  },
+  string: {
+    configuration: {
+      colour: expressionColor,
+      output: 'String',
+      message0: '%1',
+      args0: [
+        { type: 'field_input', name: 'value', text: 'text' },
+      ]
+    },
+    tree: function() {
+      return new ExpressionString(this.getFieldValue('value'));
     }
   },
   logic2: {
@@ -1876,6 +2157,7 @@ let blockDefinitions = {
   beatsPerMinute: {
     configuration: {
       colour: statementColor,
+      previousStatement: null,
       nextStatement: null,
       inputsInline: true,
       message0: 'beats per minute %1',
@@ -1885,13 +2167,14 @@ let blockDefinitions = {
     },
     tree: function() {
       let speed = childToTree.call(this, 'speed');
-      return new StatementBeatsPerMinute(speed);
+      return new StatementBeatsPerMinute(speed, this);
     }
   },
   timeSignature: {
     configuration: {
       colour: statementColor,
-      // nextStatement: null,
+      previousStatement: null,
+      nextStatement: null,
       inputsInline: true,
       message0: 'time signature %1',
       args0: [
@@ -2424,6 +2707,147 @@ let blockDefinitions = {
       return new StatementSlur(slurpBlock(bodyBlock));
     }
   },
+  sleep: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'sleep %1',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'seconds', check: ['Integer', 'Real'] },
+      ],
+    },
+    tree: function() {
+      return new StatementSleep(this, childToTree.call(this, 'seconds'));
+    }
+  },
+  clearScore: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'clear score',
+    },
+    tree: function() {
+      return new StatementClearScore(this);
+    }
+  },
+  playScoreAndWait: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'play score and wait',
+    },
+    tree: function() {
+      return new StatementPlayScoreAndWait(this);
+    }
+  },
+  playScore: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'play score',
+    },
+    tree: function() {
+      return new StatementPlayScore(this);
+    }
+  },
+  hideScore: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'hide score',
+    },
+    tree: function() {
+      return new StatementHideScore(this);
+    }
+  },
+  showScore: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'show score',
+    },
+    tree: function() {
+      return new StatementShowScore(this);
+    }
+  },
+  waitForButton: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'wait for button %1',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'message', check: 'String' },
+      ],
+    },
+    tree: function() {
+      return new StatementWaitForClick(this, childToTree.call(this, 'message'));
+    }
+  },
+  quiz: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'quiz %1 %2 %3',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'message', check: 'String' },
+        { type: 'input_value', align: 'RIGHT', name: 'answer' },
+        { type: 'input_value', align: 'RIGHT', name: 'choices', check: 'List' },
+      ],
+    },
+    tree: function() {
+      let message = childToTree.call(this, 'message');
+      let answer = childToTree.call(this, 'answer');
+      let choices = childToTree.call(this, 'choices');
+      return new StatementQuiz(this, message, answer, choices);
+    }
+  },
+  raffle: {
+    configuration: {
+      colour: expressionColor,
+      output: null,
+      message0: 'raffle %1',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'list', check: 'List' },
+      ],
+    },
+    tree: function() {
+      let list = childToTree.call(this, 'list');
+      return new ExpressionRaffle(list);
+    }
+  },
+  list: {
+    configuration: {
+      colour: expressionColor,
+      output: 'List',
+      message0: 'list %1 %2 %3',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'element0', check: null },
+        { type: 'input_value', align: 'RIGHT', name: 'element1', check: null },
+        { type: 'input_value', align: 'RIGHT', name: 'element2', check: null },
+      ],
+      mutator: 'arityMutator',
+      extensions: ['extendArity'],
+    },
+    deltaphone: {
+      arity: 3,
+    },
+    tree: function() {
+      let elements = [];
+      for (let i = 0; i < this.deltaphone.arity; ++i) {
+        let element = childToTree.call(this, 'element' + i);
+        elements.push(element);
+      }
+      return new ExpressionList(elements);
+    }
+  },
   chord: {
     configuration: {
       colour: expressionColor,
@@ -2439,7 +2863,7 @@ let blockDefinitions = {
     },
     deltaphone: {
       arity: 3,
-      elementType: 'Chord',
+      elementType: ['Delta', 'Position'],
     },
     tree: function() {
       let deltas = [];
@@ -3392,7 +3816,8 @@ function setup() {
     $('#score').alphaTab('playPause');
   });
 
-  document.getElementById('scorifyButton').addEventListener('click', () => {
+  document.getElementById('runButton').addEventListener('click', () => {
+    hasManualInterpretation = true;
     interpret();
   });
 
@@ -3417,30 +3842,31 @@ function setup() {
       last = Blockly.Xml.textToDom(last);
       console.log("last:", last);
       Blockly.Xml.domToWorkspace(last, workspace);
+      workspace.zoomToFit();
     }
   }
 
-$('#blocklyEditor clipPath[id^="blocklyZoomresetClipPath"] + image').each(function() {
+  $('#blocklyEditor clipPath[id^="blocklyZoomresetClipPath"] + image').each(function() {
 
-  // The reset control DOM has this structure:
-  //   svg
-  //     clipPath id=blocklyZoomresetClipPath...
-  //       rect
-  //     image
-  // The image has the mousedown event.
+    // The reset control DOM has this structure:
+    //   svg
+    //     clipPath id=blocklyZoomresetClipPath...
+    //       rect
+    //     image
+    // The image has the mousedown event.
 
-  Blockly.bindEventWithChecks_(this, 'mousedown', null, function(e) {
-    workspace.markFocused();
-    workspace.beginCanvasTransition();
-    workspace.zoomToFit();
-    setTimeout(function() {
-      workspace.endCanvasTransition();
-    }, 500);
-    Blockly.Touch.clearTouchIdentifier();  // Don't block future drags.
-    e.stopPropagation();  // Don't start a workspace scroll.
-    e.preventDefault();  // Stop double-clicking from selecting text.
+    Blockly.bindEventWithChecks_(this, 'mousedown', null, function(e) {
+      workspace.markFocused();
+      workspace.beginCanvasTransition();
+      workspace.zoomToFit();
+      setTimeout(function() {
+        workspace.endCanvasTransition();
+      }, 500);
+      Blockly.Touch.clearTouchIdentifier();  // Don't block future drags.
+      e.stopPropagation();  // Don't start a workspace scroll.
+      e.preventDefault();  // Stop double-clicking from selecting text.
+    });
   });
-});
 
   $('#score').alphaTab({
     width: -1,
@@ -3535,10 +3961,11 @@ $('#blocklyEditor clipPath[id^="blocklyZoomresetClipPath"] + image').each(functi
       rescopeSetters(workspace.getBlockById(event.blockId));
     }
     
-    if (event.type == Blockly.Events.BLOCK_CHANGE ||
-        event.type == Blockly.Events.BLOCK_DELETE ||
-        event.type == Blockly.Events.BLOCK_CREATE ||
-        event.type == Blockly.Events.BLOCK_MOVE) {
+    if (hasManualInterpretation &&
+        (event.type == Blockly.Events.BLOCK_CHANGE ||
+         event.type == Blockly.Events.BLOCK_DELETE ||
+         event.type == Blockly.Events.BLOCK_CREATE ||
+         event.type == Blockly.Events.BLOCK_MOVE)) {
       saveLocal();
       interpret();
     }
@@ -3748,8 +4175,9 @@ function dumpXML() {
   console.log(xml);
 }
 
-function interpret() {
+async function interpret() {
   $('#score').alphaTab('pause');
+  $('#hud-bottom').empty();
 
   // We must also check that the workspace is valid we may be trying to set the
   // warning text of disposed block.
@@ -3794,6 +4222,7 @@ function interpret() {
       scale: 0,
       iMeasure: 2,
       beats: 0,
+      sequences: [],
       halfstep: 48,
       beatsPerMeasure: 4,
       beatNote: 4,
@@ -3801,7 +4230,6 @@ function interpret() {
       functions: {},
       variables: {},
       marks: [],
-      sequences: [],
       isSlur: false,
       push: function(item) {
         this.sequences.push(item);
@@ -3815,17 +4243,10 @@ function interpret() {
     };
 
     setKeySignature(env, 0, 0, 0);
-    program.evaluate(env);
+    await program.evaluate(env);
+    generateScore(env);
+    $('#score').show();
 
-    if (env.sequences[0].items.length > 0) {
-      $('#score').alphaTab('playbackSpeed', env.bpm / 120);
-      $('#score').show();
-      let xml = env.sequences[0].toXML(env);
-      document.getElementById('scratch').value = xml;
-      render();
-    } else {
-      $('#score').hide();
-    }
   } catch (e) {
     lastWarnedBlock = e.block;
     if (e.hasOwnProperty('block')) {
@@ -3834,6 +4255,17 @@ function interpret() {
     } else {
       throw e;
     }
+  }
+}
+
+function generateScore(env) {
+  if (env.sequences[0].items.length > 0) {
+    $('#score').alphaTab('playbackSpeed', env.bpm / 120);
+    let xml = env.sequences[0].toXML(env);
+    document.getElementById('scratch').value = xml;
+    render();
+  } else {
+    $('#score').hide();
   }
 }
 
