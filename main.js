@@ -2477,16 +2477,16 @@ let blockDefinitions = {
     },
     initializeState: function() {
       let isConnectionAllowedBuiltin = this.outputConnection.isConnectionAllowed;
-      this.outputConnection.isConnectionAllowed = candidate => {
+      this.outputConnection.isConnectionAllowed = (candidate, radius) => {
         // Only connect if this block is scoped properly and Blockly says it's
         // okay. Top-level variables have no sourceBlockId. Allow them to
         // connect within non-functions. Formal parameter references have a
         // sourceBlockId. All them to connect within their TO scope.
         let candidateRootBlock = candidate.getSourceBlock().getRootBlock();
         if (this.deltaphone.hasOwnProperty('sourceBlockId')) {
-          return candidateRootBlock.id == this.deltaphone.sourceBlockId && isConnectionAllowedBuiltin.call(this.outputConnection, candidate);
+          return candidateRootBlock.id == this.deltaphone.sourceBlockId && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
         } else {
-          return candidateRootBlock.type != 'to' && isConnectionAllowedBuiltin.call(this.outputConnection, candidate);
+          return candidateRootBlock.type != 'to' && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
         }
       };
     },
