@@ -1311,12 +1311,17 @@ class StatementTo {
 }
 
 class StatementVariableGetter {
-  constructor(identifier) {
+  constructor(identifier, block) {
     this.identifier = identifier;
+    this.block = block;
   }
 
   async evaluate(env) {
-    return await env.variables[this.identifier].value.evaluate(env);
+    if (env.variables.hasOwnProperty(this.identifier)) {
+      return await env.variables[this.identifier].value.evaluate(env);
+    } else {
+      throw new RuntimeException(this.block, `I don't know anything about variable ${this.identifier}. You haven't defined it.`);
+    }
   }
 }
 
@@ -2470,9 +2475,24 @@ let blockDefinitions = {
       identifier: null,
       mode: null,
     },
+    initializeState: function() {
+      let isConnectionAllowedBuiltin = this.outputConnection.isConnectionAllowed;
+      this.outputConnection.isConnectionAllowed = candidate => {
+        // Only connect if this block is scoped properly and Blockly says it's
+        // okay. Top-level variables have no sourceBlockId. Allow them to
+        // connect within non-functions. Formal parameter references have a
+        // sourceBlockId. All them to connect within their TO scope.
+        let candidateRootBlock = candidate.getSourceBlock().getRootBlock();
+        if (this.deltaphone.hasOwnProperty('sourceBlockId')) {
+          return candidateRootBlock.id == this.deltaphone.sourceBlockId && isConnectionAllowedBuiltin.call(this.outputConnection, candidate);
+        } else {
+          return candidateRootBlock.type != 'to' && isConnectionAllowedBuiltin.call(this.outputConnection, candidate);
+        }
+      };
+    },
     tree: function() {
       let identifier = this.getField('identifier').getText();
-      return new StatementVariableGetter(identifier);
+      return new StatementVariableGetter(identifier, this);
     }
   },
 
@@ -3024,48 +3044,6 @@ function removeCalls(root, sourceBlockId) {
     }
   }
 }
-
-// Variables ------------------------------------------------------------------
-
-// function spawnGet(setBlock) {
-  // let getBlock = workspace.newBlock('get');
-  // shapeGetFromSet(setBlock, getBlock);
-  // getBlock.initSvg();
-  // getBlock.render();
-  // getBlock.select();
-// }
-
-// function shapeGetFromSet(setBlock, getBlock) {
-  // let identifier = setBlock.getField('identifier').getText();
-  // shapeGet(getBlock, setBlock.id, identifier);
-// }
-
-// function shapeGet(getBlock, setBlockId, identifier) {
-  // getBlock.deltaphone.identifier = identifier;
-  // getBlock.deltaphone.setBlockId = setBlockId;
-  // let input = getBlock.appendDummyInput();
-  // input.appendField(identifier);
-// }
-
-// function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
-  // for (let root of workspace.getTopBlocks()) {
-    // syncGetsToSet(root, sourceBlock);
-  // }
-// }
-
-// function syncGetsToSet(root, sourceBlock) {
-  // if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlock.id) {
-    // setGetToSet(sourceBlock, root);
-  // }
-
-  // for (let child of root.getChildren()) {
-    // syncGetsToSet(child, sourceBlock);
-  // }
-// }
-
-// function syncGetToSet(setBlock, getBlock) {
-  // shapeGetFromSet(setBlock, getBlock);
-// }
 
 // Calls ----------------------------------------------------------------------
 
@@ -3725,12 +3703,22 @@ function setup() {
       let container = document.createElement('mutation');
       container.setAttribute('mode', this.deltaphone.mode);
       container.setAttribute('identifier', this.deltaphone.identifier);
-      container.setAttribute('sourceblockid', this.deltaphone.sourceBlockId);
+
+      // Only formal parameter references have sourceBlockId set.
+      if (this.deltaphone.hasOwnProperty('sourceBlockId')) {
+        container.setAttribute('sourceblockid', this.deltaphone.sourceBlockId);
+      }
+
       return container;
     },
     domToMutation: function(xml) {
       this.deltaphone.mode = xml.getAttribute('mode');
-      this.deltaphone.sourceBlockId = xml.getAttribute('sourceblockid');
+
+      // Only formal parameter references have sourceBlockId set.
+      if (xml.hasAttribute('sourceblockid')) {
+        this.deltaphone.sourceBlockId = xml.getAttribute('sourceblockid');
+      }
+
       this.deltaphone.identifier = xml.getAttribute('identifier');
       this.getField('identifier').setText(this.deltaphone.identifier);
       syncMode(this);
