@@ -2479,12 +2479,13 @@ let blockDefinitions = {
       let isConnectionAllowedBuiltin = this.outputConnection.isConnectionAllowed;
       this.outputConnection.isConnectionAllowed = (candidate, radius) => {
         // Only connect if this block is scoped properly and Blockly says it's
-        // okay. Top-level variables have no sourceBlockId. Allow them to
+        // okay. Top-level variables have no formalBlockId. Allow them to
         // connect within non-functions. Formal parameter references have a
-        // sourceBlockId. All them to connect within their TO scope.
+        // formalBlockId. All them to connect within their TO scope.
         let candidateRootBlock = candidate.getSourceBlock().getRootBlock();
-        if (this.deltaphone.hasOwnProperty('sourceBlockId')) {
-          return candidateRootBlock.id == this.deltaphone.sourceBlockId && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
+        if (this.deltaphone.hasOwnProperty('formalBlockId')) {
+          let scopeRootBlock = workspace.getBlockById(this.deltaphone.formalBlockId).getParent();
+          return candidateRootBlock.id == scopeRootBlock.id && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
         } else {
           return candidateRootBlock.type != 'to' && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
         }
@@ -3091,12 +3092,14 @@ function shapeCall(callBlock, sourceBlockId, identifier, parameters) {
   }
 }
 
-function removeParameterReferences(root, sourceBlockId) {
-  if (root.type == 'variableGetter' && root.deltaphone.sourceBlockId == sourceBlockId) {
-    root.dispose();
+function removeParameterReferences(root, formalBlockId) {
+  if (root.type == 'variableGetter') {
+    if (root.deltaphone.formalBlockId == formalBlockId) {
+      root.dispose();
+    }
   } else {
     for (let child of root.getChildren()) {
-      removeParameterReferences(child, sourceBlockId);
+      removeParameterReferences(child, formalBlockId);
     }
   }
 }
@@ -3704,9 +3707,9 @@ function setup() {
       container.setAttribute('mode', this.deltaphone.mode);
       container.setAttribute('identifier', this.deltaphone.identifier);
 
-      // Only formal parameter references have sourceBlockId set.
-      if (this.deltaphone.hasOwnProperty('sourceBlockId')) {
-        container.setAttribute('sourceblockid', this.deltaphone.sourceBlockId);
+      // Only formal parameter references have formalBlockId set.
+      if (this.deltaphone.hasOwnProperty('formalBlockId')) {
+        container.setAttribute('formalblockid', this.deltaphone.formalBlockId);
       }
 
       return container;
@@ -3714,9 +3717,9 @@ function setup() {
     domToMutation: function(xml) {
       this.deltaphone.mode = xml.getAttribute('mode');
 
-      // Only formal parameter references have sourceBlockId set.
-      if (xml.hasAttribute('sourceblockid')) {
-        this.deltaphone.sourceBlockId = xml.getAttribute('sourceblockid');
+      // Only formal parameter references have formalBlockId set.
+      if (xml.hasAttribute('formalblockid')) {
+        this.deltaphone.formalBlockId = xml.getAttribute('formalblockid');
       }
 
       this.deltaphone.identifier = xml.getAttribute('identifier');
@@ -3920,7 +3923,7 @@ function setup() {
             getterBlock.getField('identifier').setText(identifier);
 
             if (identifierBlock.type == 'formalParameter') {
-              getterBlock.deltaphone.sourceBlockId = workspace.getBlockById(event.newValue).getParent().id;
+              getterBlock.deltaphone.formalBlockId = workspace.getBlockById(event.newValue).id;
             }
 
             let referenceLocation = getterBlock.getRelativeToSurfaceXY();
@@ -4098,28 +4101,42 @@ function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
 }
 
 function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
+  // Which input is it?
   let parent = formalBlock.getParent();
+  let formalIndex = parent.getChildren().indexOf(formalBlock);
 
-  // Rename parent's input.
+  // TO blocks have 1 + arity + 1 inputs. The first input is the function
+  // name. Then the formal parameters. Then the body.
+  let inputIndex = formalIndex + 1;
+  let inputName = formalize(newIdentifier);
+  parent.inputList[inputIndex].name = inputName;
+
+  parent.setWarningText(null);
   for (let i = 1; i < parent.inputList.length - 1; ++i) {
-    if (parent.inputList[i].name == formalize(oldIdentifier)) {
-      parent.inputList[i].name = formalize(newIdentifier);
+    if (i != inputIndex && parent.inputList[i].name == inputName) {
+      parent.setWarningText(wrap(`I found more than one parameter named ${newIdentifier}. Parameter names must be unique.`, 15));
     }
   }
 
   // Update parent's meta.
-  for (let parameter of parent.deltaphone.parameters) {
-    if (parameter.identifier == oldIdentifier) {
-      parameter.identifier = newIdentifier;
-      break;
-    }
-  }
+  parent.deltaphone.parameters[formalIndex].identifier = newIdentifier;
 
-  // Rename all variableGetter children.
   for (let root of workspace.getTopBlocks()) {
     renameActuals(root, parent, oldIdentifier, newIdentifier);
   }
-  renameVariableGetters(parent, oldIdentifier, newIdentifier);
+
+  // Rename all variableGetter children.
+  function renameFormalVariableGetters(root) {
+    if (root.type == 'variableGetter' && root.deltaphone.hasOwnProperty('formalBlockId') && root.deltaphone.formalBlockId == formalBlock.id) {
+      root.getField('identifier').setText(newIdentifier);
+      root.deltaphone.identifier = newIdentifier;
+    } else {
+      for (let child of root.getChildren()) {
+        renameFormalVariableGetters(child);
+      }
+    }
+  }
+  renameFormalVariableGetters(parent);
 }
 
 function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
