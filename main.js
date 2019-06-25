@@ -3150,6 +3150,29 @@ function addParameter(toBlock, mode) {
   });
 }
 
+function rebuildCall(toBlock, callBlock) {
+  let oldActuals = [];
+  for (let input of callBlock.inputList) {
+    oldActuals.push(input.connection.targetBlock());
+  }
+
+  // Clear out all inputs.
+  for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
+    callBlock.removeInput(callBlock.inputList[i].name);
+  }
+
+  shapeCallFromTo(toBlock, callBlock);
+
+  for (let [i, formalParameter] of toBlock.deltaphone.parameters.entries()) {
+    let actualBlock = oldActuals[i];
+    if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
+      callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
+    } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
+      callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
+    }
+  }
+}
+
 function syncCallToTo(toBlock, callBlock) {
   // Remove all inputs from call, but hang on to them just in case we need to
   // reconnect them later.
@@ -4121,8 +4144,24 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   // Update parent's meta.
   parent.deltaphone.parameters[formalIndex].identifier = newIdentifier;
 
+  function renameActuals(root) {
+    if (root.type == 'call' && root.deltaphone.sourceBlockId == parent.id) {
+      let input = root.inputList[formalIndex];
+
+      // Input will be null if the parameter is brand new.
+      if (input) {
+        input.name = formalize(newIdentifier);
+        rebuildCall(parent, root);
+      }
+    }
+
+    for (let child of root.getChildren()) {
+      renameActuals(child);
+    }
+  }
+
   for (let root of workspace.getTopBlocks()) {
-    renameActuals(root, parent, oldIdentifier, newIdentifier);
+    renameActuals(root, parent, formalIndex, newIdentifier);
   }
 
   // Rename all variableGetter children.
@@ -4130,29 +4169,13 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
     if (root.type == 'variableGetter' && root.deltaphone.hasOwnProperty('formalBlockId') && root.deltaphone.formalBlockId == formalBlock.id) {
       root.getField('identifier').setText(newIdentifier);
       root.deltaphone.identifier = newIdentifier;
-    } else {
-      for (let child of root.getChildren()) {
-        renameFormalVariableGetters(child);
-      }
+    }
+
+    for (let child of root.getChildren()) {
+      renameFormalVariableGetters(child);
     }
   }
   renameFormalVariableGetters(parent);
-}
-
-function renameActuals(root, toBlock, oldIdentifier, newIdentifier) {
-  if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-    let input = root.getInput(formalize(oldIdentifier));
-
-    // Input will be null if the parameter is brand new.
-    if (input) {
-      input.name = formalize(newIdentifier);
-      syncCallToTo(toBlock, root);
-    }
-  }
-
-  for (let child of root.getChildren()) {
-    renameActuals(child, toBlock, oldIdentifier, newIdentifier);
-  }
 }
 
 function renameVariableGetters(root, oldIdentifier, newIdentifier) {
