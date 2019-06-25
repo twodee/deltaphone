@@ -1295,10 +1295,18 @@ class StatementSet {
 }
 
 class StatementTo {
-  constructor(identifier, parameters, body) {
+  constructor(identifier, parameters, body, block) {
     this.identifier = identifier;
     this.parameters = parameters;
     this.body = body;
+    this.block = block;
+
+    let ids = this.block.deltaphone.parameters.map(p => p.identifier).sort();
+    for (let i = 1; i < ids.length; ++i) {
+      if (ids[i] == ids[i - 1]) {
+        throw new RuntimeException(this.block, `I found more than one parameter named '${ids[i]}'. Parameter names must be unique, or weird stuff happens.`);
+      }
+    }
   }
 
   async evaluate(env) {
@@ -1317,10 +1325,12 @@ class StatementVariableGetter {
   }
 
   async evaluate(env) {
-    if (env.variables.hasOwnProperty(this.identifier)) {
-      return await env.variables[this.identifier].value.evaluate(env);
-    } else {
+    if (this.block.deltaphone.hasOwnProperty('formalBlockId') && workspace.getBlockById(this.block.deltaphone.formalBlockId).getParent().id != this.block.getRootBlock().id) {
+      throw new RuntimeException(this.block, `I found a parameter reference outside of its function. Parameter references are only meaningful inside their function.`);
+    } else if (!env.variables.hasOwnProperty(this.identifier)) {
       throw new RuntimeException(this.block, `I don't know anything about variable ${this.identifier}. You haven't defined it.`);
+    } else {
+      return await env.variables[this.identifier].value.evaluate(env);
     }
   }
 }
@@ -2487,7 +2497,7 @@ let blockDefinitions = {
           let scopeRootBlock = workspace.getBlockById(this.deltaphone.formalBlockId).getParent();
           return candidateRootBlock.id == scopeRootBlock.id && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
         } else {
-          return candidateRootBlock.type != 'to' && isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
+          return isConnectionAllowedBuiltin.call(this.outputConnection, candidate, radius);
         }
       };
     },
@@ -2513,31 +2523,31 @@ let blockDefinitions = {
       mode: null,
     },
     tree: function() {
-      let identifier = this.deltaphone.identifier;
+      let toBlock = workspace.getBlockById(this.deltaphone.sourceBlockId);
+      let formalParameters = toBlock.deltaphone.parameters;
+      let functionIdentifier = this.deltaphone.identifier;
       let actualParameters = [];
-      for (let input of this.inputList) {
-        if (input.name.startsWith('_')) {
-          let targetBlock = input.connection.targetBlock();
-          if (targetBlock != null) {
-            if (input.type == Blockly.INPUT_VALUE) {
-              actualParameters.push({
-                identifier: unformalize(input.name),
-                mode: 'value',
-                expression: targetBlock.tree(),
-              });
-            } else {
-              actualParameters.push({
-                identifier: unformalize(input.name),
-                mode: 'action',
-                expression: slurpBlock(targetBlock),
-              });
-            }
+      for (let [i, input] of this.inputList.entries()) {
+        let targetBlock = input.connection.targetBlock();
+        if (targetBlock != null) {
+          if (input.type == Blockly.INPUT_VALUE) {
+            actualParameters.push({
+              identifier: formalParameters[i].identifier,
+              mode: 'value',
+              expression: targetBlock.tree(),
+            });
           } else {
-            throw new ParseException(this, 'I am missing my \'' + unformalize(input.name) + '\' parameter.');
+            actualParameters.push({
+              identifier: formalParameters[i].identifier,
+              mode: 'action',
+              expression: slurpBlock(targetBlock),
+            });
           }
+        } else {
+          throw new ParseException(this, `I am missing my '${formalParameters[i].identifier}' parameter.`);
         }
       }
-      return new StatementCall(identifier, actualParameters);
+      return new StatementCall(functionIdentifier, actualParameters);
     }
   },
   get: {
@@ -2655,13 +2665,17 @@ let blockDefinitions = {
       this.deltaphone.parameters = [];
     },
     tree: function() {
+      // TO blocks have 1 + arity + 1 inputs. The first input is the function
+      // name. Then the formal parameters. Then the body.
+
       let identifier = this.getField('identifier').getText();
       let parameters = [];
       for (let i = 1; i < this.inputList.length - 1; ++i) {
         parameters.push({ identifier: this.inputList[i].name });
       }
       let bodyBlock = this.getInputTargetBlock('body');
-      return new StatementTo(identifier, parameters, slurpBlock(bodyBlock));
+
+      return new StatementTo(identifier, parameters, slurpBlock(bodyBlock), this);
     }
   },
   multif: {
@@ -2978,14 +2992,6 @@ let blockDefinitions = {
   },
 };
 
-function formalize(identifier) {
-  return '_' + identifier;
-}
-
-function unformalize(identifier) {
-  return identifier.substring(1, identifier.length);
-}
-
 function initializeBlock(id) {
   let definition = blockDefinitions[id];
   Blockly.Blocks[id] = {
@@ -3074,9 +3080,9 @@ function shapeCall(callBlock, sourceBlockId, identifier, parameters) {
     for (let [index, parameter] of parameters.entries()) {
       let input;
       if (parameter.mode == 'action') {
-        input = callBlock.appendStatementInput(formalize(parameter.identifier));
+        input = callBlock.appendStatementInput(`actual${index}`);
       } else {
-        input = callBlock.appendValueInput(formalize(parameter.identifier));
+        input = callBlock.appendValueInput(`actual${index}`);
       }
       
       // Tack on the function name for first row.
@@ -3092,34 +3098,61 @@ function shapeCall(callBlock, sourceBlockId, identifier, parameters) {
   }
 }
 
-function removeParameterReferences(root, formalBlockId) {
-  if (root.type == 'variableGetter') {
-    if (root.deltaphone.formalBlockId == formalBlockId) {
-      root.dispose();
-    }
-  } else {
-    for (let child of root.getChildren()) {
-      removeParameterReferences(child, formalBlockId);
-    }
-  }
-}
+function removeInputByIndex(i) {
+	let input = this.inputList[i];
+	if (input.connection && input.connection.isConnected()) {
+		input.connection.setShadowDom(null);
+		var block = input.connection.targetBlock();
+		if (block.isShadow()) {
+			// Destroy any attached shadow block.
+			block.dispose();
+		} else {
+			// Disconnect any attached normal block.
+			block.unplug();
+		}
+	}
+	input.dispose();
+	this.inputList.splice(i, 1);
+};
 
 function removeParameter(formalBlock) {
   let identifier = formalBlock.getField('identifier').getText();
   let toBlock = formalBlock.getParent();
+  let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
 
-  // Remove parameter from parent's metadata.
-  let i = toBlock.deltaphone.parameters.findIndex(parameter => parameter.identifier == identifier);
-  if (i >= 0) {
-    toBlock.deltaphone.parameters.splice(i, 1);
+  if (formalIndex < 0) {
+    throw 'erm....';
   }
 
-  // Dispose of parent's input, block itself, and any parameter references.
-  toBlock.removeInput(formalize(identifier));
+  // Remove parameter from TO block and rename successors.
+  toBlock.deltaphone.parameters.splice(formalIndex, 1);
+  toBlock.removeInput(`formal${formalIndex}`);
   formalBlock.dispose();
+  for (let i = formalIndex + 1; i < toBlock.inputList.length - 1; ++i) {
+    toBlock.inputList[i].name = `formal${i - 1}`;
+  }
+
+  function removeReferencesAndActuals(root) {
+    // Remove actual.
+    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+      root.removeInput(`actual${formalIndex}`);
+			rebuildCall(toBlock, root);
+    }
+    
+    // Remove reference.
+    else if (root.type == 'variableGetter') {
+      if (root.deltaphone.formalBlockId == formalBlock.id) {
+        root.dispose();
+      }
+    }
+
+    for (let child of root.getChildren()) {
+      removeReferencesAndActuals(child);
+    }
+  }
+
   for (let root of workspace.getTopBlocks()) {
-    removeParameterReferences(root, formalBlock.id);
-    syncCallsToTo(root, toBlock);
+    removeReferencesAndActuals(root);
   }
 }
 
@@ -3135,7 +3168,7 @@ function addParameter(toBlock, mode) {
     parameterBlock.deltaphone.mode = mode;
     syncModeArrow(parameterBlock);
 
-    let input = toBlock.getInput(formalize(identifier));
+    let input = toBlock.inputList[toBlock.inputList.length - 2];
     input.connection.connect(parameterBlock.outputConnection);
 
     parameterBlock.initSvg();
@@ -3145,7 +3178,7 @@ function addParameter(toBlock, mode) {
 
     // Add input to all calls.
     for (let root of workspace.getTopBlocks()) {
-      syncCallsToTo(root, toBlock);
+      rebuildCalls(root, toBlock);
     }
   });
 }
@@ -3153,7 +3186,11 @@ function addParameter(toBlock, mode) {
 function rebuildCall(toBlock, callBlock) {
   let oldActuals = [];
   for (let input of callBlock.inputList) {
-    oldActuals.push(input.connection.targetBlock());
+		if (input.connection) {
+			oldActuals.push(input.connection.targetBlock());
+		} else {
+			oldActuals.push(null);
+		}
   }
 
   // Clear out all inputs.
@@ -3164,12 +3201,24 @@ function rebuildCall(toBlock, callBlock) {
   shapeCallFromTo(toBlock, callBlock);
 
   for (let [i, formalParameter] of toBlock.deltaphone.parameters.entries()) {
-    let actualBlock = oldActuals[i];
-    if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
-      callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
-    } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
-      callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
+    if (i < oldActuals.length && oldActuals[i]) {
+      let actualBlock = oldActuals[i];
+      if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
+        callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
+      } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
+        callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
+      }
     }
+  }
+}
+
+function rebuildCalls(root, toBlock) {
+  if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+    rebuildCall(toBlock, root);
+  }
+
+  for (let child of root.getChildren()) {
+    rebuildCalls(child, toBlock);
   }
 }
 
@@ -3579,24 +3628,25 @@ function setup() {
       // Remove any existing inputs, but save the block in case it
       // will need to get reconnected.
       let oldFormalBlocks = [];
-      while (this.inputList.length > 2) {
-        let input = this.inputList[this.inputList.length - 2];
-        oldFormalBlocks.push(input.connection.targetBlock());
-        this.removeInput(input.name);
+      for (let i = 1; i < this.inputList.length - 1; ++i) {
+        oldFormalBlocks.push(this.inputList[i].connection.targetBlock());
+      }
+
+      for (let i = this.inputList.length - 2; i >= 1; --i) {
+        removeInputByIndex.call(this, i);
       }
 
       // Add inputs from model.
-      for (let parameter of this.deltaphone.parameters) {
-        let input = this.appendValueInput(formalize(parameter.identifier));
+      for (let [i, parameter] of this.deltaphone.parameters.entries()) {
+        let input = this.appendValueInput(`formal${i}`);
         this.moveNumberedInputBefore(this.inputList.length - 1, this.inputList.length - 2);
       }
 
       // Traverse previous blocks, disposing of unused ones and reconnecting
       // persistent ones.
-      for (let oldFormalBlock of oldFormalBlocks) {
-        let identifier = oldFormalBlock.getField('identifier').getText();
-        if (this.getInput(formalize(identifier))) {
-          this.getInput(formalize(identifier)).connection.connect(oldFormalBlock.outputConnection);
+      for (let [i, oldFormalBlock] of oldFormalBlocks.entries()) {
+        if (i < this.inputList.length) {
+          this.inputList[i + 1].connection.connect(oldFormalBlock.outputConnection);
         } else {
           oldFormalBlock.dispose();
         }
@@ -4125,34 +4175,13 @@ function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
 
 function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   // Which input is it?
-  let parent = formalBlock.getParent();
-  let formalIndex = parent.getChildren().indexOf(formalBlock);
-
-  // TO blocks have 1 + arity + 1 inputs. The first input is the function
-  // name. Then the formal parameters. Then the body.
-  let inputIndex = formalIndex + 1;
-  let inputName = formalize(newIdentifier);
-  parent.inputList[inputIndex].name = inputName;
-
-  parent.setWarningText(null);
-  for (let i = 1; i < parent.inputList.length - 1; ++i) {
-    if (i != inputIndex && parent.inputList[i].name == inputName) {
-      parent.setWarningText(wrap(`I found more than one parameter named ${newIdentifier}. Parameter names must be unique.`, 15));
-    }
-  }
-
-  // Update parent's meta.
-  parent.deltaphone.parameters[formalIndex].identifier = newIdentifier;
+  let toBlock = formalBlock.getParent();
+  let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
+  toBlock.deltaphone.parameters[formalIndex].identifier = newIdentifier;
 
   function renameActuals(root) {
-    if (root.type == 'call' && root.deltaphone.sourceBlockId == parent.id) {
-      let input = root.inputList[formalIndex];
-
-      // Input will be null if the parameter is brand new.
-      if (input) {
-        input.name = formalize(newIdentifier);
-        rebuildCall(parent, root);
-      }
+    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+      rebuildCall(toBlock, root);
     }
 
     for (let child of root.getChildren()) {
@@ -4161,7 +4190,7 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   }
 
   for (let root of workspace.getTopBlocks()) {
-    renameActuals(root, parent, formalIndex, newIdentifier);
+    renameActuals(root);
   }
 
   // Rename all variableGetter children.
@@ -4175,7 +4204,7 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
       renameFormalVariableGetters(child);
     }
   }
-  renameFormalVariableGetters(parent);
+  renameFormalVariableGetters(toBlock);
 }
 
 function renameVariableGetters(root, oldIdentifier, newIdentifier) {
