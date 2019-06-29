@@ -3145,11 +3145,15 @@ function removeCalls(root, sourceBlockId) {
 
 function spawnCall(toBlock, mode) {
   let callBlock = workspace.newBlock('call');
+
   callBlock.deltaphone.mode = mode;
   shapeCallFromTo(toBlock, callBlock);
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
+
+  let toPosition = toBlock.getRelativeToSurfaceXY();
+  callBlock.moveBy(toPosition.x - 10, toPosition.y + 10);
 }
 
 function shapeCallFromTo(toBlock, callBlock) {
@@ -3213,6 +3217,8 @@ function removeParameter(formalBlock) {
     throw 'erm....';
   }
 
+  let startPosition = toBlock.getRelativeToSurfaceXY();
+
   // Remove parameter from TO block and rename successors.
   toBlock.deltaphone.parameters.splice(formalIndex, 1);
   toBlock.removeInput(`formal${formalIndex}`);
@@ -3243,10 +3249,15 @@ function removeParameter(formalBlock) {
   for (let root of workspace.getTopBlocks()) {
     removeReferencesAndActuals(root);
   }
+
+  let stopPosition = toBlock.getRelativeToSurfaceXY();
+  toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
 }
 
 function addParameter(toBlock, mode) {
   let identifier = 'newparam';
+
+  let startPosition = toBlock.getRelativeToSurfaceXY();
 
   mutateUndoably(toBlock, () => {
     toBlock.deltaphone.parameters.push({identifier: identifier, mode: mode});
@@ -3269,6 +3280,9 @@ function addParameter(toBlock, mode) {
     for (let root of workspace.getTopBlocks()) {
       rebuildCalls(root, toBlock);
     }
+
+    let stopPosition = toBlock.getRelativeToSurfaceXY();
+    toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
   });
 }
 
