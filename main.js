@@ -78,10 +78,12 @@ let restDurations = [
   [{'src': 'images/rest32.svg', 'width': 12, 'height': 25, 'alt': 'Thirty-second'}, '32'],
 ];
 
-let deltaUnits = [
-  ['keysteps', '0'],
-  ['halfsteps', '1'],
-];
+let DeltaUnit = Object.freeze({
+  KeystepsFromRoot: { label: 'keysteps from root', value: 0 },
+  KeystepsFromPrevious: { label: 'keysteps from previous', value: 1 },
+  HalfstepsFromRoot: { label: 'halfsteps from root', value: 2 },
+  HalfstepsFromPrevious: { label: 'halfsteps from previous', value: 3 },
+});
 
 let IntervalName = Object.freeze({
   Unison: { label: 'unison', value: 0 },
@@ -429,7 +431,7 @@ class Note {
     }
 
     let spelling = env.noteSpellings[this.id % 12];
-    let octave = Math.floor(this.id / 12);
+    let octave = Math.floor(this.id / 12) - 1;
 
     // We may have enharmonic'd around the octave.
     if (spelling == 'B#') {
@@ -595,7 +597,7 @@ class ExpressionPosition {
     let octaveValue = (await this.octave.evaluate(env)).toInteger();
     let letterValue = (await this.letter.evaluate(env)).toInteger();
     let accidentalValue = (await this.accidental.evaluate(env)).toInteger();
-    let halfstep = 12 * octaveValue + letterValue + accidentalValue;
+    let halfstep = 12 * (octaveValue + 1) + letterValue + accidentalValue;
     return new PrimitivePosition(letterValue, accidentalValue, octaveValue, halfstep);
   }
 }
@@ -692,6 +694,24 @@ class PrimitiveDelta {
   }
 }
 
+class PrimitiveChord {
+  constructor(notes) {
+    this.notes = notes;
+  }
+
+  async evaluate(env) {
+    return this;
+  }
+
+  toString() {
+    return 'asdfa';
+  }
+
+  toArray() {
+    return this.notes;
+  }
+}
+
 class PrimitiveInterval {
   constructor(quality, name, direction, halfstep) {
     this.quality = quality;
@@ -723,11 +743,20 @@ class ExpressionDelta {
   async evaluate(env) {
     let value = (await this.deltaValue.evaluate(env)).toInteger();
     let jump;
+    let deltaUnitValue = enumByValue(DeltaUnit, this.deltaUnit.value);
 
-    if (this.deltaUnit.value == 1) {
+    let from;
+    if (deltaUnitValue == DeltaUnit.HalfstepsFromRoot || deltaUnitValue == DeltaUnit.KeystepsFromRoot) {
+      from = env.root;
+    } else {
+      from = env.halfstep;
+    }
+
+    // env.halfstep = env.marks[env.marks.length - 1];
+    if (deltaUnitValue == DeltaUnit.HalfstepsFromRoot || deltaUnitValue == DeltaUnit.HalfstepsFromPrevious) {
       jump = value;
     } else {
-      let base = ((env.halfstep - env.root) % 12 + 12) % 12;
+      let base = ((from - env.scaleRoot) % 12 + 12) % 12;
       jump = 0;
 
       if (value > 0) {
@@ -751,7 +780,7 @@ class ExpressionDelta {
       }
     }
 
-    return new PrimitiveDelta(value, this.deltaUnit.value, env.halfstep + jump);
+    return new PrimitiveDelta(value, this.deltaUnit.value, from + jump);
   }
 }
 
@@ -1013,7 +1042,45 @@ class ExpressionChord {
     if (ids.length > 0) {
       env.halfstep = ids[0].toInteger();
     }
-    return ids;
+    return new PrimitiveChord(ids);
+  }
+}
+
+class ExpressionInvert {
+  constructor(chord, delta, block) {
+    this.chord = chord;
+    this.delta = delta;
+  }
+
+  async evaluate(env) {
+    let ids = (await this.chord.evaluate(env)).toArray();
+    console.log("ids:", ids);
+    let deltaValue = (await this.delta.evaluate(env)).toInteger();
+    console.log("deltaValue:", deltaValue);
+
+    if (deltaValue > 0) {
+      for (let i = 0; i < deltaValue; ++i) {
+        let lopped = ids[0];
+        ids.splice(0, 1);
+        lopped.halfstep += 12;
+        ids.push(lopped);
+      }
+    } else {
+      for (let i = 0; i < -deltaValue; ++i) {
+        let lopped = ids[ids.length - 1];
+        lopped.halfstep -= 12;
+        ids.splice(ids.length - 1, 1);
+        ids.splice(0, 0, lopped);
+      }
+    }
+
+    console.log("ids:", ids);
+
+    if (ids.length > 0) {
+      env.halfstep = ids[0].toInteger();
+    }
+
+    return new PrimitiveChord(ids);
   }
 }
 
@@ -1056,12 +1123,12 @@ class StatementRest {
   }
 }
 
-class StatementReroot {
+class StatementRoot {
   constructor() {
   }
 
   async evaluate(env) {
-    env.root = env.halfstep % 12;
+    env.root = env.halfstep;
   }
 }
 
@@ -1137,8 +1204,8 @@ class StatementKeySignature {
 }
 
 function setKeySignature(env, letterOffset, accidentalOffset, scale) {
-  env.root = letterOffset + accidentalOffset;
-  env.halfstep = 12 * (letterOffset >= 9 ? 3 : 4) + env.root;
+  env.scaleRoot = letterOffset + accidentalOffset;
+  env.halfstep = 12 * (letterOffset >= 9 ? 3 : 4) + env.scaleRoot;
   env.scale = scale;
   env.rotation = 0;
 
@@ -1168,7 +1235,7 @@ function setKeySignature(env, letterOffset, accidentalOffset, scale) {
     current += heptatonicOffsets.up[index];
   }
 
-  current = (env.root % 12 + 12) % 12;    
+  current = (env.scaleRoot % 12 + 12) % 12;    
   let firstSpelling = `${letterLabel}${accidentalLabel}`;
   env.noteSpellings = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
   env.noteSpellings[current] = firstSpelling;
@@ -1739,8 +1806,8 @@ class StatementPlay {
   async evaluate(env) {
     let durationValue = (await this.duration.evaluate(env)).toInteger();
     let ids = await this.note.evaluate(env);
-    if (Array.isArray(ids)) {
-      env.emit(new Chord(ids.map((id, index) => new Note(id.toInteger(), durationValue, this.block))));
+    if (ids instanceof PrimitiveChord) {
+      env.emit(new Chord(ids.toArray().map((id, index) => new Note(id.toInteger(), durationValue, this.block))));
     } else {
       env.emit(new Note(ids.toInteger(), durationValue, this.block));
     }
@@ -2027,7 +2094,7 @@ let blockDefinitions = {
       output: 'DeltaUnit',
       message0: '%1',
       args0: [
-        { type: 'field_dropdown', name: 'unit', options: deltaUnits },
+        { type: 'field_dropdown', name: 'unit', options: enumToOptions(DeltaUnit) },
       ]
     },
     tree: function() {
@@ -2527,26 +2594,32 @@ let blockDefinitions = {
       let formalParameters = toBlock.deltaphone.parameters;
       let functionIdentifier = this.deltaphone.identifier;
       let actualParameters = [];
-      for (let [i, input] of this.inputList.entries()) {
-        let targetBlock = input.connection.targetBlock();
-        if (targetBlock != null) {
-          if (input.type == Blockly.INPUT_VALUE) {
-            actualParameters.push({
-              identifier: formalParameters[i].identifier,
-              mode: 'value',
-              expression: targetBlock.tree(),
-            });
+
+      // When we have no parameters, we have a dummy input that shouldn't
+      // get processed.
+      if (formalParameters.length > 0) {
+        for (let [i, input] of this.inputList.entries()) {
+          let targetBlock = input.connection.targetBlock();
+          if (targetBlock != null) {
+            if (input.type == Blockly.INPUT_VALUE) {
+              actualParameters.push({
+                identifier: formalParameters[i].identifier,
+                mode: 'value',
+                expression: targetBlock.tree(),
+              });
+            } else {
+              actualParameters.push({
+                identifier: formalParameters[i].identifier,
+                mode: 'action',
+                expression: slurpBlock(targetBlock),
+              });
+            }
           } else {
-            actualParameters.push({
-              identifier: formalParameters[i].identifier,
-              mode: 'action',
-              expression: slurpBlock(targetBlock),
-            });
+            throw new ParseException(this, `I am missing my '${formalParameters[i].identifier}' parameter.`);
           }
-        } else {
-          throw new ParseException(this, `I am missing my '${formalParameters[i].identifier}' parameter.`);
         }
       }
+
       return new StatementCall(functionIdentifier, actualParameters);
     }
   },
@@ -2635,7 +2708,7 @@ let blockDefinitions = {
       args0: [
         { type: 'input_value', align: 'RIGHT', name: 'value' },
       ],
-      inputsInline: true,
+      inputsInline: false,
     },
     tree: function() {
       let value = childToTree.call(this, 'value');
@@ -2909,6 +2982,22 @@ let blockDefinitions = {
       return new ExpressionChord(deltas);
     }
   },
+  invert: {
+    configuration: {
+      colour: expressionColor,
+      output: 'Chord',
+      message0: 'invert %1 %2',
+      args0: [
+        { type: 'input_value', align: 'RIGHT', name: 'chord', check: ['Chord'] },
+        { type: 'input_value', align: 'RIGHT', name: 'delta', check: ['Delta', 'Integer'] },
+      ],
+    },
+    tree: function() {
+      let chord = childToTree.call(this, 'chord');
+      let delta = childToTree.call(this, 'delta');
+      return new ExpressionInvert(chord, delta, this);
+    }
+  },
   repeat12: {
     configuration: {
       colour: statementColor,
@@ -2928,15 +3017,15 @@ let blockDefinitions = {
       return new StatementRepeat12(commonBlock, firstBlock, secondBlock);
     }
   },
-  reroot: {
+  root: {
     configuration: {
       colour: statementColor,
       previousStatement: null,
       nextStatement: null,
-      message0: 'reroot',
+      message0: 'root',
     },
     tree: function() {
-      return new StatementReroot();
+      return new StatementRoot();
     }
   },
   mark: {
@@ -3219,47 +3308,6 @@ function rebuildCalls(root, toBlock) {
 
   for (let child of root.getChildren()) {
     rebuildCalls(child, toBlock);
-  }
-}
-
-function syncCallToTo(toBlock, callBlock) {
-  // Remove all inputs from call, but hang on to them just in case we need to
-  // reconnect them later.
-  let oldActuals = new Map();
-  for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
-    let callInput = callBlock.inputList[i];
-    if (callInput.name.startsWith('_')) {
-      let actualBlock = callBlock.getInputTargetBlock(callInput.name);
-      if (actualBlock) {
-        oldActuals.set(callInput.name, actualBlock);
-      }
-    }
-    callBlock.removeInput(callInput.name);
-  }
-
-  shapeCallFromTo(toBlock, callBlock);
-
-  // Restore any actual parameter blocks that persisted across the shape change.
-  for (let [name, actualBlock] of oldActuals) {
-    let identifier = name.substring(1, name.length);
-    let formalParameter = toBlock.deltaphone.parameters.find(parameter => parameter.identifier == identifier);
-    if (formalParameter) {
-      if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
-        callBlock.getInput(name).connection.connect(actualBlock.outputConnection);
-      } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
-        callBlock.getInput(name).connection.connect(actualBlock.previousConnection);
-      }
-    }
-  }
-}
-
-function syncCallsToTo(root, toBlock) {
-  if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-    syncCallToTo(toBlock, root);
-  }
-
-  for (let child of root.getChildren()) {
-    syncCallsToTo(child, toBlock);
   }
 }
 
@@ -4147,9 +4195,50 @@ function reattachReferences(root, identifier, sourceBlock) {
   }
 }
 
+// function renameToCall(toBlock, callBlock) {
+  // Remove all inputs from call, but hang on to them just in case we need to
+  // reconnect them later.
+  // let oldActuals = new Map();
+  // for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
+    // let callInput = callBlock.inputList[i];
+    // if (callInput.name.startsWith('_')) {
+      // let actualBlock = callBlock.getInputTargetBlock(callInput.name);
+      // if (actualBlock) {
+        // oldActuals.set(callInput.name, actualBlock);
+      // }
+    // }
+    // callBlock.removeInput(callInput.name);
+  // }
+
+  // shapeCallFromTo(toBlock, callBlock);
+
+  // Restore any actual parameter blocks that persisted across the shape change.
+  // for (let [name, actualBlock] of oldActuals) {
+    // let identifier = name.substring(1, name.length);
+    // let formalParameter = toBlock.deltaphone.parameters.find(parameter => parameter.identifier == identifier);
+    // if (formalParameter) {
+      // if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
+        // callBlock.getInput(name).connection.connect(actualBlock.outputConnection);
+      // } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
+        // callBlock.getInput(name).connection.connect(actualBlock.previousConnection);
+      // }
+    // }
+  // }
+// }
+
 function renameTo(toBlock, oldIdentifier, newIdentifier) {
+  function renameToCalls(root, toBlock) {
+    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+      rebuildCall(toBlock, root);
+    }
+
+    for (let child of root.getChildren()) {
+      renameToCalls(child, toBlock);
+    }
+  }
+
   for (let root of workspace.getTopBlocks()) {
-    syncCallsToTo(root, toBlock);
+    renameToCalls(root, toBlock);
   }
 }
 
@@ -4275,6 +4364,7 @@ async function interpret() {
 
     let env = {
       root: 0,
+      scaleRoot: 0,
       rotation: 0,
       scale: 0,
       iMeasure: 2,

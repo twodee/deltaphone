@@ -11,7 +11,7 @@
   <script src="blocks.js"></script>
   <script src="main.js"></script>
   <link rel="stylesheet" type="text/css" href="style.css">
-  <!-- <link href="https://fonts.googleapis.com/css?family=Hind" rel="stylesheet"> -->
+  <link href="https://fonts.googleapis.com/css?family=Hind" rel="stylesheet">
   <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32x32.png">
   <link rel="icon" type="image/png" sizes="16x16" href="images/favicon-16x16.png">
 </head>
@@ -103,7 +103,7 @@
       </value>
       <value name="deltaUnit">
         <block type="deltaUnit">
-          <field name="unit">keysteps</field>
+          <field name="unit">0</field>
         </block>
       </value>
       <value name="duration">
@@ -174,6 +174,13 @@
       </value>
     </block>
     <block type="chord"></block>
+    <block type="invert">
+      <value name="delta">
+        <block type="deltaValue">
+          <field name="value">+1</field>
+        </block>
+      </value>
+    </block>
     <block type="position">
       <value name="letter">
         <block type="letter">
@@ -199,7 +206,7 @@
       </value>
       <value name="unit">
         <block type="deltaUnit">
-          <field name="unit">keysteps</field>
+          <field name="unit">0</field>
         </block>
       </value>
     </block>
@@ -230,7 +237,7 @@
       </value>
       <value name="deltaUnit">
         <block type="deltaUnit">
-          <field name="unit">keysteps</field>
+          <field name="unit">0</field>
         </block>
       </value>
     </block>
@@ -272,7 +279,7 @@
     <block type="mark"></block>
     <block type="back"></block>
     <block type="unmark"></block>
-    <block type="reroot"></block>
+    <block type="root"></block>
   </category>
   <category name="Loops">
     <block type="repeat"></block>
@@ -349,7 +356,7 @@
       <field name="value">+1</field>
     </block>
     <block type="deltaUnit">
-      <field name="unit">keysteps</field>
+      <field name="unit">0</field>
     </block>
     <block type="intervalQuality">
       <field name="value">0</field>
