@@ -3101,21 +3101,33 @@ function initializeBlock(id) {
   };
 }
 
-function mutateUndoably(block, mutate, callback = null) {
+function mutateUndoably(block, mutate) {
+  // The mutate callback should only touch the block's metadata. The actual
+  // reconstruction of the block will be handled by the change listener.
+
+  // We'll fire off one mega-event at the end, but not any for the individual mutation steps.
   Blockly.Events.disable();
+
+  // Get XML of incoming block state.
   let oldMutation = block.mutationToDom();
+
+  // Adjust it.
   mutate();
+
+  // Get XML of outgoing block state.
   let newMutation = block.mutationToDom();
 
+  console.log("oldMutation:", oldMutation);
+  console.log("newMutation:", newMutation);
+
+  // Apply XML. TODO: Why do I need this? Isn't the mutation already applied?
   block.domToMutation(newMutation);
+
   Blockly.Events.enable();
 
+  // Record changes in undo stack.
   let event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
   Blockly.Events.fire(event);
-
-  if (callback) {
-    callback();
-  }
 }
 
 function triggerArity(block, arity) {
@@ -3137,6 +3149,44 @@ function removeCalls(root, sourceBlockId) {
   } else {
     for (let child of root.getChildren()) {
       removeCalls(child, sourceBlockId);
+    }
+  }
+}
+
+function shapeTo(toBlock) {
+  console.log("this.deltaphone.parameters:", toBlock.deltaphone.parameters);
+
+  // Remove any existing inputs, but save the block in case it
+  // will need to get reconnected.
+  let oldFormalBlocks = [];
+  for (let i = 1; i < toBlock.inputList.length - 1; ++i) {
+    oldFormalBlocks.push(toBlock.inputList[i].connection.targetBlock());
+  }
+
+  console.log("oldFormalBlocks:", oldFormalBlocks);
+  console.log("toBlock.inputList:", toBlock.inputList);
+
+  // Remove old parameter inputs.
+  for (let i = toBlock.inputList.length - 2; i >= 1; --i) {
+    removeInputByIndex.call(toBlock, i);
+  }
+
+  // Add new parameter inputs.
+  for (let [i, parameter] of toBlock.deltaphone.parameters.entries()) {
+    let input = toBlock.appendValueInput(`formal${i}`);
+    toBlock.moveNumberedInputBefore(toBlock.inputList.length - 1, toBlock.inputList.length - 2);
+  }
+
+  toBlock.initSvg();
+  toBlock.render();
+
+  // Traverse previous blocks, disposing of unused ones and reconnecting
+  // persistent ones.
+  for (let [i, oldFormalBlock] of oldFormalBlocks.entries()) {
+    if (i < toBlock.inputList.length - 2) {
+      toBlock.inputList[i + 1].connection.connect(oldFormalBlock.outputConnection);
+    } else {
+      oldFormalBlock.dispose();
     }
   }
 }
@@ -3220,12 +3270,9 @@ function removeParameter(formalBlock) {
   let startPosition = toBlock.getRelativeToSurfaceXY();
 
   // Remove parameter from TO block and rename successors.
-  toBlock.deltaphone.parameters.splice(formalIndex, 1);
-  toBlock.removeInput(`formal${formalIndex}`);
-  formalBlock.dispose();
-  for (let i = formalIndex + 1; i < toBlock.inputList.length - 1; ++i) {
-    toBlock.inputList[i].name = `formal${i - 1}`;
-  }
+  mutateUndoably(toBlock, () => {
+    toBlock.deltaphone.parameters.splice(formalIndex, 1);
+  });
 
   function removeReferencesAndActuals(root) {
     // Remove actual.
@@ -3246,12 +3293,19 @@ function removeParameter(formalBlock) {
     }
   }
 
+  Blockly.Events.disable();
+  toBlock.removeInput(`formal${formalIndex}`);
+  formalBlock.dispose();
+  for (let i = formalIndex + 1; i < toBlock.inputList.length - 1; ++i) {
+    toBlock.inputList[i].name = `formal${i - 1}`;
+  }
+  let stopPosition = toBlock.getRelativeToSurfaceXY();
+  toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
+  Blockly.Events.enable();
+
   for (let root of workspace.getTopBlocks()) {
     removeReferencesAndActuals(root);
   }
-
-  let stopPosition = toBlock.getRelativeToSurfaceXY();
-  toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
 }
 
 function addParameter(toBlock, mode) {
@@ -3261,29 +3315,34 @@ function addParameter(toBlock, mode) {
 
   mutateUndoably(toBlock, () => {
     toBlock.deltaphone.parameters.push({identifier: identifier, mode: mode});
-  }, () => {
-    let parameterBlock = workspace.newBlock('formalParameter');
-    parameterBlock.getField('identifier').setText(identifier);
-
-    parameterBlock.deltaphone.mode = mode;
-    syncModeArrow(parameterBlock);
-
-    let input = toBlock.inputList[toBlock.inputList.length - 2];
-    input.connection.connect(parameterBlock.outputConnection);
-
-    parameterBlock.initSvg();
-    parameterBlock.render();
-    parameterBlock.select();
-    parameterBlock.getField('identifier').showEditor_();
-
-    // Add input to all calls.
-    for (let root of workspace.getTopBlocks()) {
-      rebuildCalls(root, toBlock);
-    }
-
-    let stopPosition = toBlock.getRelativeToSurfaceXY();
-    toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
   });
+
+  Blockly.Events.disable();
+
+  let parameterBlock = workspace.newBlock('formalParameter');
+  parameterBlock.getField('identifier').setText(identifier);
+
+  parameterBlock.deltaphone.mode = mode;
+  syncModeArrow(parameterBlock);
+
+  console.log("toBlock.inputList:", toBlock.inputList);
+  let input = toBlock.inputList[toBlock.inputList.length - 2];
+  input.connection.connect(parameterBlock.outputConnection);
+
+  parameterBlock.initSvg();
+  parameterBlock.render();
+  parameterBlock.select();
+  parameterBlock.getField('identifier').showEditor_();
+
+  // Add input to all calls.
+  for (let root of workspace.getTopBlocks()) {
+    rebuildCalls(root, toBlock);
+  }
+
+  let stopPosition = toBlock.getRelativeToSurfaceXY();
+  toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
+
+  Blockly.Events.enable();
 }
 
 function rebuildCall(toBlock, callBlock) {
@@ -3674,6 +3733,8 @@ function setup() {
     },
     // From XML to blocks.
     domToMutation: function(xml) {
+      console.log("xml:", xml);
+
       this.deltaphone.parameters = [];
 
       // Populate metadata model.
@@ -3687,32 +3748,7 @@ function setup() {
         }
       }
 
-      // Remove any existing inputs, but save the block in case it
-      // will need to get reconnected.
-      let oldFormalBlocks = [];
-      for (let i = 1; i < this.inputList.length - 1; ++i) {
-        oldFormalBlocks.push(this.inputList[i].connection.targetBlock());
-      }
-
-      for (let i = this.inputList.length - 2; i >= 1; --i) {
-        removeInputByIndex.call(this, i);
-      }
-
-      // Add inputs from model.
-      for (let [i, parameter] of this.deltaphone.parameters.entries()) {
-        let input = this.appendValueInput(`formal${i}`);
-        this.moveNumberedInputBefore(this.inputList.length - 1, this.inputList.length - 2);
-      }
-
-      // Traverse previous blocks, disposing of unused ones and reconnecting
-      // persistent ones.
-      for (let [i, oldFormalBlock] of oldFormalBlocks.entries()) {
-        if (i < this.inputList.length) {
-          this.inputList[i + 1].connection.connect(oldFormalBlock.outputConnection);
-        } else {
-          oldFormalBlock.dispose();
-        }
-      }
+      shapeTo(this);
     },
   });
 
@@ -4021,6 +4057,8 @@ function setup() {
   });
 
   workspace.addChangeListener(event => {
+    console.log("event:", event);
+
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
       let block = workspace.getBlockById(event.blockId); 
       if (block.type == 'formalParameter') {
@@ -4209,37 +4247,6 @@ function reattachReferences(root, identifier, sourceBlock) {
   }
 }
 
-// function renameToCall(toBlock, callBlock) {
-  // Remove all inputs from call, but hang on to them just in case we need to
-  // reconnect them later.
-  // let oldActuals = new Map();
-  // for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
-    // let callInput = callBlock.inputList[i];
-    // if (callInput.name.startsWith('_')) {
-      // let actualBlock = callBlock.getInputTargetBlock(callInput.name);
-      // if (actualBlock) {
-        // oldActuals.set(callInput.name, actualBlock);
-      // }
-    // }
-    // callBlock.removeInput(callInput.name);
-  // }
-
-  // shapeCallFromTo(toBlock, callBlock);
-
-  // Restore any actual parameter blocks that persisted across the shape change.
-  // for (let [name, actualBlock] of oldActuals) {
-    // let identifier = name.substring(1, name.length);
-    // let formalParameter = toBlock.deltaphone.parameters.find(parameter => parameter.identifier == identifier);
-    // if (formalParameter) {
-      // if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
-        // callBlock.getInput(name).connection.connect(actualBlock.outputConnection);
-      // } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
-        // callBlock.getInput(name).connection.connect(actualBlock.previousConnection);
-      // }
-    // }
-  // }
-// }
-
 function renameTo(toBlock, oldIdentifier, newIdentifier) {
   function renameToCalls(root, toBlock) {
     if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
@@ -4251,9 +4258,11 @@ function renameTo(toBlock, oldIdentifier, newIdentifier) {
     }
   }
 
+  Blockly.Events.disable();
   for (let root of workspace.getTopBlocks()) {
     renameToCalls(root, toBlock);
   }
+  Blockly.Events.enable();
 }
 
 function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
@@ -4279,8 +4288,11 @@ function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
 function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   // Which input is it?
   let toBlock = formalBlock.getParent();
-  let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
-  toBlock.deltaphone.parameters[formalIndex].identifier = newIdentifier;
+
+  mutateUndoably(formalBlock, () => {
+    let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
+    toBlock.deltaphone.parameters[formalIndex].identifier = newIdentifier;
+  });
 
   function renameActuals(root) {
     if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
@@ -4290,10 +4302,6 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
     for (let child of root.getChildren()) {
       renameActuals(child);
     }
-  }
-
-  for (let root of workspace.getTopBlocks()) {
-    renameActuals(root);
   }
 
   // Rename all variableGetter children.
@@ -4307,7 +4315,13 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
       renameFormalVariableGetters(child);
     }
   }
+
+  Blockly.Events.disable();
+  for (let root of workspace.getTopBlocks()) {
+    renameActuals(root);
+  }
   renameFormalVariableGetters(toBlock);
+  Blockly.Events.enable();
 }
 
 function renameVariableGetters(root, oldIdentifier, newIdentifier) {
