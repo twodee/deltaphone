@@ -3236,8 +3236,25 @@ function removeFormalParameter(formalBlock) {
   formalBlock.dispose();
 
   // Backfill vacated slot.
-  for (let i = formalIndex + 1; i < toBlock.inputList.length - 1; ++i) {
-    toBlock.inputList[i].connection.connect(toBlock.inputList[i + 1].connection.targetBlock());
+  for (let i = formalIndex + 1; i < toBlock.inputList.length - 2; ++i) {
+    toBlock.inputList[i].connection.connect(toBlock.inputList[i + 1].connection.targetBlock().outputConnection);
+  }
+
+  function removeReferencesAndActuals(root) {
+    // Remove reference.
+    if (root.type == 'variableGetter') {
+      if (root.deltaphone.formalBlockId == formalBlock.id) {
+        root.dispose();
+      }
+    }
+
+    for (let child of root.getChildren()) {
+      removeReferencesAndActuals(child);
+    }
+  }
+
+  for (let root of workspace.getTopBlocks()) {
+    removeReferencesAndActuals(root);
   }
 
   // let startPosition = toBlock.getRelativeToSurfaceXY();
@@ -3246,55 +3263,108 @@ function removeFormalParameter(formalBlock) {
   mutateUndoably(toBlock, () => {
     toBlock.deltaphone.parameters.splice(formalIndex, 1);
   }, () => {
-    shapeTo(toBlock);
+    shapeFunctionBlocks(toBlock);
   });
-
-  // function removeReferencesAndActuals(root) {
-    // Remove actual.
-    // if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-      // root.removeInput(`actual${formalIndex}`);
-			// rebuildCall(toBlock, root);
-    // }
-    
-    // Remove reference.
-    // else if (root.type == 'variableGetter') {
-      // if (root.deltaphone.formalBlockId == formalBlock.id) {
-        // root.dispose();
-      // }
-    // }
-
-    // for (let child of root.getChildren()) {
-      // removeReferencesAndActuals(child);
-    // }
-  // }
 
   // let stopPosition = toBlock.getRelativeToSurfaceXY();
   // toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
-
-  // for (let root of workspace.getTopBlocks()) {
-    // removeReferencesAndActuals(root);
-  // }
 
   Blockly.Events.setGroup(true);
 }
 
 function shapeTo(toBlock) {
-  let parameters = toBlock.deltaphone.parameters;
+  let meta = toBlock.deltaphone;
 
   // Add any missing parameter slots.
   let firstIndex = toBlock.inputList.length - 2;
-  for (let i = firstIndex; i < parameters.length; ++i) {
+  for (let i = firstIndex; i < meta.parameters.length; ++i) {
     let input = toBlock.appendValueInput(`formal${i}`);
     toBlock.moveNumberedInputBefore(toBlock.inputList.length - 1, toBlock.inputList.length - 2);
   }
 
   // Remove any unused parameter slots.
-  while (toBlock.inputList.length - 2 > parameters.length) {
+  while (toBlock.inputList.length - 2 > meta.parameters.length) {
     removeInputByIndex.call(toBlock, toBlock.inputList.length - 2);
   }
 
   toBlock.initSvg();
   toBlock.render();
+}
+
+// Reshape calls.
+function shapeCalls2(toBlock, parameter) {
+  let parameters = toBlock.deltaphone.parameters;
+  let identifier = toBlock.getField('identifier').getText();
+
+  function handleCall(callBlock) {
+    let oldActuals = [];
+    for (let input of callBlock.inputList) {
+      if (input.connection) {
+        oldActuals.push(input.connection.targetBlock());
+      } else {
+        oldActuals.push(null);
+      }
+    }
+
+    // Clear out all inputs.
+    for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
+      callBlock.removeInput(callBlock.inputList[i].name);
+    }
+
+    if (parameters.length == 0) {
+      let input = callBlock.appendDummyInput();
+      input.appendField(identifier);
+    } else {
+      for (let [i, parameter] of parameters.entries()) {
+        let input;
+        if (parameter.mode == 'action') {
+          input = callBlock.appendStatementInput(`actual${i}`);
+        } else {
+          input = callBlock.appendValueInput(`actual${i}`);
+        }
+          
+        // Tack on the function name for first row.
+        if (i == 0) {
+          input.appendField(identifier);
+        }
+
+        // Only name parameters when there are multiple.
+        if (parameters.length > 1) {
+          input.appendField(parameter.identifier).setAlign(Blockly.ALIGN_RIGHT);
+        }
+      }
+    }
+
+    for (let [i, formalParameter] of toBlock.deltaphone.parameters.entries()) {
+      if (i < oldActuals.length && oldActuals[i]) {
+        let actualBlock = oldActuals[i];
+        if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
+          callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
+        } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
+          callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
+        }
+      }
+    }
+  }
+
+  function traverse(root) {
+    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+      handleCall(root);
+    }
+
+    for (let child of root.getChildren()) {
+      traverse(child);
+    }
+  }
+
+  for (let root of workspace.getTopBlocks()) {
+    traverse(root);
+  }
+}
+
+function shapeFunctionBlocks(toBlock) {
+  shapeCalls2(toBlock);
+  shapeTo(toBlock);
 }
 
 function addFormalParameter(toBlock, mode) {
@@ -3308,7 +3378,7 @@ function addFormalParameter(toBlock, mode) {
   mutateUndoably(toBlock, () => {
     toBlock.deltaphone.parameters.push(parameter);
   }, () => {
-    shapeTo(toBlock);
+    shapeFunctionBlocks(toBlock);
   });
 
   let formalBlock = workspace.newBlock('formalParameter');
@@ -3730,9 +3800,8 @@ function setup() {
           }
         }
       }
-      console.log("!!!!! this.deltaphone.parameters:", this.deltaphone.parameters);
 
-      shapeTo(this);
+      shapeFunctionBlocks(this);
     },
   });
 
@@ -4058,11 +4127,14 @@ function setup() {
       console.log("event:", event);
     }
 
+    // Variable, formal parameter, and function blocks all have text fields in
+    // which the the programmer can enter identifiers. We need to propagate the
+    // name changes we see to the related call and variable reference blocks.
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
       let block = workspace.getBlockById(event.blockId); 
       
-      // Blockly generates some events in an invalid order, so the ID'd
-      // block might not exist yet.
+      // Blockly generates some events in an invalid order, in my opinion, so
+      // the identified block might not exist yet.
       if (block) {
 
         // If the event that triggered this is not part of a group, we want to
@@ -4087,20 +4159,21 @@ function setup() {
       }
     }
 
-    // We want to handle a selection of a formal parameter by generating an
-    // parameter reference that can be used in the body. The event we care
-    // about has some compound logic to it. It must be a UI selected element
-    // event. The selection is being made if its newValue property is set,
-    // which is the ID of the formal parameter block. But formal parameters are
-    // selected right after they are added, so we further require that a
-    // gesture be in progress. No gesture is in progress when a parameter is
-    // freshly added.
+    // We handle a selection of a formal parameter by generating an parameter
+    // reference that can be used in the body. The event we care about has some
+    // compound logic to it. It must be a UI selected element event. The
+    // selection is being made if its newValue property is set, which is the ID
+    // of the formal parameter block. But formal parameters are selected right
+    // after they are added, so we further require that a gesture be in
+    // progress. No gesture is in progress when a parameter is freshly added.
     else if (event.type == Blockly.Events.UI) {
       if (event.hasOwnProperty('element') && event.element == 'selected') {
         if (event.newValue && workspace.currentGesture_ && workspace.currentGesture_.startField_ == null) {
           let identifierBlock = workspace.getBlockById(event.newValue); 
 
           if (identifierBlock.type == 'formalParameter' || identifierBlock.type == 'setIdentifier') {
+            Blockly.Events.setGroup(true);
+
             Blockly.selected.unselect(); // WHY?
 
             let identifier = identifierBlock.getField('identifier').getText();
@@ -4111,6 +4184,7 @@ function setup() {
             syncMode(getterBlock);
 
             getterBlock.getField('identifier').setText(identifier);
+            Blockly.Events.fire(new Blockly.Events.BlockChange(getterBlock, 'field', 'identifier', null, identifier));
 
             if (identifierBlock.type == 'formalParameter') {
               getterBlock.deltaphone.formalBlockId = workspace.getBlockById(event.newValue).id;
@@ -4133,6 +4207,12 @@ function setup() {
             workspace.currentGesture_.setStartBlock(getterBlock);
             workspace.currentGesture_.setTargetBlock_(getterBlock);
             getterBlock.select();
+
+            // Is there a way to stop the group after the mouse is released?
+            // The issue is that the block might instead be thrown away. But
+            // then undo essentially does nothing. We go from deleted block
+            // to uncreated block.
+            Blockly.Events.setGroup(false);
           }
         }
       }
