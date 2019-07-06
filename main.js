@@ -6,6 +6,8 @@ let parameterColor = 330;
 let lastWarnedBlock = null;
 let hasManualInterpretation = false;
 let scoreRoot;
+let triggerEvent = null;
+let nRenames = 0;
 
 let letters = [
   ['C', '0'],
@@ -3101,12 +3103,10 @@ function initializeBlock(id) {
   };
 }
 
-function mutateUndoably(block, mutate) {
+function mutateUndoably(block, mutate, reshape) {
   // The mutate callback should only touch the block's metadata. The actual
-  // reconstruction of the block will be handled by the change listener.
-
-  // We'll fire off one mega-event at the end, but not any for the individual mutation steps.
-  Blockly.Events.disable();
+  // reconstruction of the block and reconnection of its children will be
+  // handled elsewhere.
 
   // Get XML of incoming block state.
   let oldMutation = block.mutationToDom();
@@ -3117,13 +3117,15 @@ function mutateUndoably(block, mutate) {
   // Get XML of outgoing block state.
   let newMutation = block.mutationToDom();
 
-  console.log("oldMutation:", oldMutation);
+  console.trace("oldMutation:", oldMutation);
   console.log("newMutation:", newMutation);
 
   // Apply XML. TODO: Why do I need this? Isn't the mutation already applied?
   block.domToMutation(newMutation);
 
-  Blockly.Events.enable();
+  if (reshape) {
+    reshape();
+  }
 
   // Record changes in undo stack.
   let event = new Blockly.Events.BlockChange(block, 'mutation', null, Blockly.Xml.domToText(oldMutation), Blockly.Xml.domToText(newMutation));
@@ -3149,44 +3151,6 @@ function removeCalls(root, sourceBlockId) {
   } else {
     for (let child of root.getChildren()) {
       removeCalls(child, sourceBlockId);
-    }
-  }
-}
-
-function shapeTo(toBlock) {
-  console.log("this.deltaphone.parameters:", toBlock.deltaphone.parameters);
-
-  // Remove any existing inputs, but save the block in case it
-  // will need to get reconnected.
-  let oldFormalBlocks = [];
-  for (let i = 1; i < toBlock.inputList.length - 1; ++i) {
-    oldFormalBlocks.push(toBlock.inputList[i].connection.targetBlock());
-  }
-
-  console.log("oldFormalBlocks:", oldFormalBlocks);
-  console.log("toBlock.inputList:", toBlock.inputList);
-
-  // Remove old parameter inputs.
-  for (let i = toBlock.inputList.length - 2; i >= 1; --i) {
-    removeInputByIndex.call(toBlock, i);
-  }
-
-  // Add new parameter inputs.
-  for (let [i, parameter] of toBlock.deltaphone.parameters.entries()) {
-    let input = toBlock.appendValueInput(`formal${i}`);
-    toBlock.moveNumberedInputBefore(toBlock.inputList.length - 1, toBlock.inputList.length - 2);
-  }
-
-  toBlock.initSvg();
-  toBlock.render();
-
-  // Traverse previous blocks, disposing of unused ones and reconnecting
-  // persistent ones.
-  for (let [i, oldFormalBlock] of oldFormalBlocks.entries()) {
-    if (i < toBlock.inputList.length - 2) {
-      toBlock.inputList[i + 1].connection.connect(oldFormalBlock.outputConnection);
-    } else {
-      oldFormalBlock.dispose();
     }
   }
 }
@@ -3258,7 +3222,9 @@ function removeInputByIndex(i) {
 	this.inputList.splice(i, 1);
 };
 
-function removeParameter(formalBlock) {
+function removeFormalParameter(formalBlock) {
+  Blockly.Events.setGroup(true);
+
   let identifier = formalBlock.getField('identifier').getText();
   let toBlock = formalBlock.getParent();
   let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
@@ -3267,82 +3233,97 @@ function removeParameter(formalBlock) {
     throw 'erm....';
   }
 
-  let startPosition = toBlock.getRelativeToSurfaceXY();
+  formalBlock.dispose();
+
+  // Backfill vacated slot.
+  for (let i = formalIndex + 1; i < toBlock.inputList.length - 1; ++i) {
+    toBlock.inputList[i].connection.connect(toBlock.inputList[i + 1].connection.targetBlock());
+  }
+
+  // let startPosition = toBlock.getRelativeToSurfaceXY();
 
   // Remove parameter from TO block and rename successors.
   mutateUndoably(toBlock, () => {
     toBlock.deltaphone.parameters.splice(formalIndex, 1);
+  }, () => {
+    shapeTo(toBlock);
   });
 
-  function removeReferencesAndActuals(root) {
+  // function removeReferencesAndActuals(root) {
     // Remove actual.
-    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-      root.removeInput(`actual${formalIndex}`);
-			rebuildCall(toBlock, root);
-    }
+    // if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+      // root.removeInput(`actual${formalIndex}`);
+			// rebuildCall(toBlock, root);
+    // }
     
     // Remove reference.
-    else if (root.type == 'variableGetter') {
-      if (root.deltaphone.formalBlockId == formalBlock.id) {
-        root.dispose();
-      }
-    }
+    // else if (root.type == 'variableGetter') {
+      // if (root.deltaphone.formalBlockId == formalBlock.id) {
+        // root.dispose();
+      // }
+    // }
 
-    for (let child of root.getChildren()) {
-      removeReferencesAndActuals(child);
-    }
-  }
+    // for (let child of root.getChildren()) {
+      // removeReferencesAndActuals(child);
+    // }
+  // }
 
-  Blockly.Events.disable();
-  toBlock.removeInput(`formal${formalIndex}`);
-  formalBlock.dispose();
-  for (let i = formalIndex + 1; i < toBlock.inputList.length - 1; ++i) {
-    toBlock.inputList[i].name = `formal${i - 1}`;
-  }
-  let stopPosition = toBlock.getRelativeToSurfaceXY();
-  toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
-  Blockly.Events.enable();
+  // let stopPosition = toBlock.getRelativeToSurfaceXY();
+  // toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
 
-  for (let root of workspace.getTopBlocks()) {
-    removeReferencesAndActuals(root);
-  }
+  // for (let root of workspace.getTopBlocks()) {
+    // removeReferencesAndActuals(root);
+  // }
+
+  Blockly.Events.setGroup(true);
 }
 
-function addParameter(toBlock, mode) {
-  let identifier = 'newparam';
+function shapeTo(toBlock) {
+  let parameters = toBlock.deltaphone.parameters;
 
-  let startPosition = toBlock.getRelativeToSurfaceXY();
-
-  mutateUndoably(toBlock, () => {
-    toBlock.deltaphone.parameters.push({identifier: identifier, mode: mode});
-  });
-
-  Blockly.Events.disable();
-
-  let parameterBlock = workspace.newBlock('formalParameter');
-  parameterBlock.getField('identifier').setText(identifier);
-
-  parameterBlock.deltaphone.mode = mode;
-  syncModeArrow(parameterBlock);
-
-  console.log("toBlock.inputList:", toBlock.inputList);
-  let input = toBlock.inputList[toBlock.inputList.length - 2];
-  input.connection.connect(parameterBlock.outputConnection);
-
-  parameterBlock.initSvg();
-  parameterBlock.render();
-  parameterBlock.select();
-  parameterBlock.getField('identifier').showEditor_();
-
-  // Add input to all calls.
-  for (let root of workspace.getTopBlocks()) {
-    rebuildCalls(root, toBlock);
+  // Add any missing parameter slots.
+  let firstIndex = toBlock.inputList.length - 2;
+  for (let i = firstIndex; i < parameters.length; ++i) {
+    let input = toBlock.appendValueInput(`formal${i}`);
+    toBlock.moveNumberedInputBefore(toBlock.inputList.length - 1, toBlock.inputList.length - 2);
   }
 
-  let stopPosition = toBlock.getRelativeToSurfaceXY();
-  toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
+  // Remove any unused parameter slots.
+  while (toBlock.inputList.length - 2 > parameters.length) {
+    removeInputByIndex.call(toBlock, toBlock.inputList.length - 2);
+  }
 
-  Blockly.Events.enable();
+  toBlock.initSvg();
+  toBlock.render();
+}
+
+function addFormalParameter(toBlock, mode) {
+  Blockly.Events.setGroup(true);
+
+  let parameter = {
+    identifier: 'newparam',
+    mode: mode,
+  };
+
+  mutateUndoably(toBlock, () => {
+    toBlock.deltaphone.parameters.push(parameter);
+  }, () => {
+    shapeTo(toBlock);
+  });
+
+  let formalBlock = workspace.newBlock('formalParameter');
+  parameter.formalBlockId = formalBlock.id;
+  formalBlock.getField('identifier').setText(parameter.identifier);
+  formalBlock.deltaphone.mode = parameter.mode;
+
+  syncModeArrow(formalBlock);
+  formalBlock.initSvg();
+  formalBlock.render();
+  toBlock.inputList[toBlock.inputList.length - 2].connection.connect(formalBlock.outputConnection);
+  formalBlock.select();
+  formalBlock.getField('identifier').showEditor_();
+
+  Blockly.Events.setGroup(false);
 }
 
 function rebuildCall(toBlock, callBlock) {
@@ -3584,7 +3565,7 @@ function setup() {
           enabled: true,
           text: 'Delete parameter',
           callback: function() {
-            removeParameter(block);
+            removeFormalParameter(block);
           }
         };
         options.push(option);
@@ -3653,7 +3634,7 @@ function setup() {
           enabled: true,
           text: 'Add value parameter',
           callback: function() {
-            addParameter(block, 'value');
+            addFormalParameter(block, 'value');
           }
         };
         options.push(option);
@@ -3662,7 +3643,7 @@ function setup() {
           enabled: true,
           text: 'Add action parameter',
           callback: function() {
-            addParameter(block, 'action');
+            addFormalParameter(block, 'action');
           }
         };
         options.push(option);
@@ -3724,6 +3705,9 @@ function setup() {
         let parameterNode = document.createElement('parameter');
         parameterNode.setAttribute('identifier', parameter.identifier);
         parameterNode.setAttribute('mode', parameter.mode);
+        if (parameter.formalBlockId) {
+          parameterNode.setAttribute('formalblockid', parameter.formalBlockId);
+        }
         parametersNode.appendChild(parameterNode);
       }
 
@@ -3733,8 +3717,6 @@ function setup() {
     },
     // From XML to blocks.
     domToMutation: function(xml) {
-      console.log("xml:", xml);
-
       this.deltaphone.parameters = [];
 
       // Populate metadata model.
@@ -3743,10 +3725,12 @@ function setup() {
           for (let parameterNode of child.children) {
             let identifier = parameterNode.getAttribute('identifier');
             let mode = parameterNode.getAttribute('mode');
-            this.deltaphone.parameters.push({ identifier: identifier, mode: mode });
+            let formalBlockId = parameterNode.hasAttribute('formalblockid') ? parameterNode.getAttribute('formalblockid') : null;
+            this.deltaphone.parameters.push({ identifier: identifier, mode: mode, formalBlockId: formalBlockId });
           }
         }
       }
+      console.log("!!!!! this.deltaphone.parameters:", this.deltaphone.parameters);
 
       shapeTo(this);
     },
@@ -3971,6 +3955,15 @@ function setup() {
       callback: pasteWorkspace,
     };
     options.push(option);
+
+    option = {
+      enabled: true,
+      text: 'Show Undo',
+      callback: () => {
+        console.log("workspace.undoStack_:", workspace.undoStack_);
+      },
+    };
+    options.push(option);
   };
 
   document.getElementById('playButton').addEventListener('click', () => {
@@ -3987,7 +3980,6 @@ function setup() {
     exportMusicXML();
   });
 
-  console.log("source0:", source0);
   if (source0) {
     let xml = Blockly.Xml.textToDom(source0);
     console.log(xml);
@@ -4003,7 +3995,12 @@ function setup() {
     if (last) {
       last = Blockly.Xml.textToDom(last);
       console.log("last:", last);
+
+      // Don't commit reload into undo history.
+      Blockly.Events.recordUndo = false;
       Blockly.Xml.domToWorkspace(last, workspace);
+      Blockly.Events.recordUndo = true;
+
       workspace.zoomToFit();
     }
   }
@@ -4057,16 +4054,36 @@ function setup() {
   });
 
   workspace.addChangeListener(event => {
-    console.log("event:", event);
+    if (event.recordUndo) {
+      console.log("event:", event);
+    }
 
     if (event.type == Blockly.Events.CHANGE && event.element == 'field') {
       let block = workspace.getBlockById(event.blockId); 
-      if (block.type == 'formalParameter') {
-        renameFormal(block, event.oldValue, event.newValue);
-      } else if (block.type == 'to') {
-        renameTo(block, event.oldValue, event.newValue);
-      } else if (block.type == 'setIdentifier') {
-        renameVariable(block, event.oldValue, event.newValue);
+      
+      // Blockly generates some events in an invalid order, so the ID'd
+      // block might not exist yet.
+      if (block) {
+
+        // If the event that triggered this is not part of a group, we want to
+        // make it and any events that get triggered by it as part of a group.
+        let isUngrouped = !event.group;
+        if (isUngrouped) {
+          Blockly.Events.setGroup(true);
+          event.group = Blockly.Events.getGroup();
+        }
+
+        if (block.type == 'formalParameter') {
+          renameFormal(block, event.oldValue, event.newValue);
+        } else if (block.type == 'to') {
+          renameTo(block, event.oldValue, event.newValue);
+        } else if (block.type == 'setIdentifier') {
+          renameVariable(block, event.oldValue, event.newValue);
+        }
+
+        if (isUngrouped) {
+          Blockly.Events.setGroup(false);
+        }
       }
     }
 
@@ -4289,7 +4306,8 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   // Which input is it?
   let toBlock = formalBlock.getParent();
 
-  mutateUndoably(formalBlock, () => {
+  console.log("rename formal!!!!!");
+  mutateUndoably(toBlock, () => {
     let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
     toBlock.deltaphone.parameters[formalIndex].identifier = newIdentifier;
   });
@@ -4503,3 +4521,60 @@ function exportMusicXML() {
 }
 
 window.addEventListener('load', setup);
+
+  // Remove any existing inputs, but save the block in case it
+  // will need to get reconnected.
+  // let oldFormalBlocks = [];
+  // for (let i = 1; i < toBlock.inputList.length - 1; ++i) {
+    // oldFormalBlocks.push(toBlock.inputList[i].connection.targetBlock());
+  // }
+
+  // Remove old parameter inputs.
+  // for (let i = toBlock.inputList.length - 2; i >= 1; --i) {
+    // removeInputByIndex.call(toBlock, i);
+  // }
+
+  // Add new parameter inputs.
+  // for (let [i, parameter] of toBlock.deltaphone.parameters.entries()) {
+    // let input = toBlock.appendValueInput(`formal${i}`);
+    // toBlock.moveNumberedInputBefore(toBlock.inputList.length - 1, toBlock.inputList.length - 2);
+
+    // let formalBlock;
+    // let oldFormalBlockIndex = oldFormalBlocks.findIndex(block => block.id == parameter.formalBlockId);
+
+    // if (oldFormalBlockIndex >= 0) {
+      // formalBlock = oldFormalBlocks[oldFormalBlockIndex];
+      // oldFormalBlocks.splice(oldFormalBlockIndex, 1);
+    // } else {
+      // if (parameter.formalBlockId) {
+        // formalBlock = workspace.newBlock('formalParameter', parameter.formalBlockId);
+        // formalBlock.id = parameter.formalBlockId;
+      // } else {
+        // formalBlock = workspace.newBlock('formalParameter');
+        // parameter.formalBlockId = formalBlock.id;
+      // }
+    // }
+
+    // formalBlock.getField('identifier').setText(parameter.identifier);
+    // formalBlock.deltaphone.mode = parameter.mode;
+    // syncModeArrow(formalBlock);
+    // formalBlock.initSvg();
+    // formalBlock.render();
+    // toBlock.inputList[1 + i].connection.connect(formalBlock.outputConnection);
+  // }
+
+  // Add input to all calls.
+  // for (let root of workspace.getTopBlocks()) {
+    // rebuildCalls(root, toBlock);
+  // }
+  
+  // Traverse previous blocks, disposing of unused ones and reconnecting
+  // persistent ones.
+  // for (let oldFormalBlock of oldFormalBlocks) {
+    // oldFormalBlock.dispose();
+  // }
+//
+  // let startPosition = toBlock.getRelativeToSurfaceXY();
+  // let stopPosition = toBlock.getRelativeToSurfaceXY();
+  // toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
+
