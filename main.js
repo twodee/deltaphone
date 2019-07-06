@@ -3224,6 +3224,7 @@ function removeInputByIndex(i) {
 
 function removeFormalParameter(formalBlock) {
   Blockly.Events.setGroup(true);
+  console.log("starting new group on formal remove");
 
   let identifier = formalBlock.getField('identifier').getText();
   let toBlock = formalBlock.getParent();
@@ -3269,7 +3270,7 @@ function removeFormalParameter(formalBlock) {
   // let stopPosition = toBlock.getRelativeToSurfaceXY();
   // toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
 
-  Blockly.Events.setGroup(true);
+  Blockly.Events.setGroup(false);
 }
 
 function shapeTo(toBlock) {
@@ -3369,6 +3370,7 @@ function shapeFunctionBlocks(toBlock) {
 
 function addFormalParameter(toBlock, mode) {
   Blockly.Events.setGroup(true);
+  console.log("start add group");
 
   let parameter = {
     identifier: 'newparam',
@@ -3394,6 +3396,7 @@ function addFormalParameter(toBlock, mode) {
   formalBlock.getField('identifier').showEditor_();
 
   Blockly.Events.setGroup(false);
+  console.log("stop add group");
 }
 
 function rebuildCall(toBlock, callBlock) {
@@ -4123,9 +4126,33 @@ function setup() {
   });
 
   workspace.addChangeListener(event => {
-    if (event.recordUndo) {
-      console.log("event:", event);
+    // We handle a selection of a formal parameter by generating an parameter
+    // reference that can be used in the body. The event we care about has some
+    // compound logic to it. It must be a UI selected element event. The
+    // selection is being made if its newValue property is set, which is the ID
+    // of the formal parameter block. But formal parameters are selected right
+    // after they are added, so we further require that a gesture be in
+    // progress. No gesture is in progress when a parameter is freshly added.
+    if (event.type == Blockly.Events.UI) {
+      if (event.hasOwnProperty('element') && event.element == 'selected') {
+        if (event.newValue && workspace.currentGesture_ && workspace.currentGesture_.startField_ == null) {
+          let identifierBlock = workspace.getBlockById(event.newValue); 
+
+          if (identifierBlock.type == 'formalParameter' || identifierBlock.type == 'setIdentifier') {
+            generateFormalReference(identifierBlock);
+          }
+        }
+      }
     }
+
+    // The remaining events we only want to listen for when they are actively
+    // happening. When they are being played back by undo/redo, the mutators
+    // will ensure consistency.
+    if (!event.recordUndo) {
+      return;
+    }
+
+    console.log("event:", event);
 
     // Variable, formal parameter, and function blocks all have text fields in
     // which the the programmer can enter identifiers. We need to propagate the
@@ -4142,6 +4169,7 @@ function setup() {
         let isUngrouped = !event.group;
         if (isUngrouped) {
           Blockly.Events.setGroup(true);
+          console.log("start field edit group");
           event.group = Blockly.Events.getGroup();
         }
 
@@ -4155,65 +4183,7 @@ function setup() {
 
         if (isUngrouped) {
           Blockly.Events.setGroup(false);
-        }
-      }
-    }
-
-    // We handle a selection of a formal parameter by generating an parameter
-    // reference that can be used in the body. The event we care about has some
-    // compound logic to it. It must be a UI selected element event. The
-    // selection is being made if its newValue property is set, which is the ID
-    // of the formal parameter block. But formal parameters are selected right
-    // after they are added, so we further require that a gesture be in
-    // progress. No gesture is in progress when a parameter is freshly added.
-    else if (event.type == Blockly.Events.UI) {
-      if (event.hasOwnProperty('element') && event.element == 'selected') {
-        if (event.newValue && workspace.currentGesture_ && workspace.currentGesture_.startField_ == null) {
-          let identifierBlock = workspace.getBlockById(event.newValue); 
-
-          if (identifierBlock.type == 'formalParameter' || identifierBlock.type == 'setIdentifier') {
-            Blockly.Events.setGroup(true);
-
-            Blockly.selected.unselect(); // WHY?
-
-            let identifier = identifierBlock.getField('identifier').getText();
-            let getterBlock = workspace.newBlock('variableGetter');
-
-            getterBlock.deltaphone.mode = identifierBlock.deltaphone.mode;
-            getterBlock.deltaphone.identifier = identifier;
-            syncMode(getterBlock);
-
-            getterBlock.getField('identifier').setText(identifier);
-            Blockly.Events.fire(new Blockly.Events.BlockChange(getterBlock, 'field', 'identifier', null, identifier));
-
-            if (identifierBlock.type == 'formalParameter') {
-              getterBlock.deltaphone.formalBlockId = workspace.getBlockById(event.newValue).id;
-            }
-
-            let referenceLocation = getterBlock.getRelativeToSurfaceXY();
-            let mouse = workspace.currentGesture_.mouseDownXY_;
-
-            let point = Blockly.utils.mouseToSvg({clientX: mouse.x, clientY: mouse.y}, workspace.getParentSvg(), workspace.getInverseScreenCTM());
-            let rel = workspace.getOriginOffsetInPixels();
-            let mouseX = (point.x - rel.x) / workspace.scale;
-            let mouseY = (point.y - rel.y) / workspace.scale;
-
-            getterBlock.initSvg();
-            getterBlock.render();
-            getterBlock.bringToFront();
-
-            getterBlock.moveBy(mouseX - referenceLocation.x - getterBlock.width / 2, mouseY - referenceLocation.y - getterBlock.height / 2);
-
-            workspace.currentGesture_.setStartBlock(getterBlock);
-            workspace.currentGesture_.setTargetBlock_(getterBlock);
-            getterBlock.select();
-
-            // Is there a way to stop the group after the mouse is released?
-            // The issue is that the block might instead be thrown away. But
-            // then undo essentially does nothing. We go from deleted block
-            // to uncreated block.
-            Blockly.Events.setGroup(false);
-          }
+          console.log("stop field edit group");
         }
       }
     }
@@ -4247,6 +4217,52 @@ function setup() {
       }
     }
   }
+}
+
+function generateFormalReference(identifierBlock, formalBlockId) {
+  Blockly.Events.setGroup(true);
+  console.log("start formal ref group");
+
+  Blockly.selected.unselect(); // WHY?
+
+  let identifier = identifierBlock.getField('identifier').getText();
+  let getterBlock = workspace.newBlock('variableGetter');
+
+  getterBlock.deltaphone.mode = identifierBlock.deltaphone.mode;
+  getterBlock.deltaphone.identifier = identifier;
+  syncMode(getterBlock);
+
+  getterBlock.getField('identifier').setText(identifier);
+  Blockly.Events.fire(new Blockly.Events.BlockChange(getterBlock, 'field', 'identifier', null, identifier));
+
+  if (identifierBlock.type == 'formalParameter') {
+    getterBlock.deltaphone.formalBlockId = identifierBlock.id;
+  }
+
+  let referenceLocation = getterBlock.getRelativeToSurfaceXY();
+  let mouse = workspace.currentGesture_.mouseDownXY_;
+
+  let point = Blockly.utils.mouseToSvg({clientX: mouse.x, clientY: mouse.y}, workspace.getParentSvg(), workspace.getInverseScreenCTM());
+  let rel = workspace.getOriginOffsetInPixels();
+  let mouseX = (point.x - rel.x) / workspace.scale;
+  let mouseY = (point.y - rel.y) / workspace.scale;
+
+  getterBlock.initSvg();
+  getterBlock.render();
+  getterBlock.bringToFront();
+
+  getterBlock.moveBy(mouseX - referenceLocation.x - getterBlock.width / 2, mouseY - referenceLocation.y - getterBlock.height / 2);
+
+  workspace.currentGesture_.setStartBlock(getterBlock);
+  workspace.currentGesture_.setTargetBlock_(getterBlock);
+  getterBlock.select();
+
+  // Is there a way to stop the group after the mouse is released?
+  // The issue is that the block might instead be thrown away. But
+  // then undo essentially does nothing. We go from deleted block
+  // to uncreated block.
+  Blockly.Events.setGroup(false);
+  console.log("stop formal ref group");
 }
 
 function registerResizeListener(bounds, gap, resize) {
@@ -4404,6 +4420,7 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
 
   // Rename all variableGetter children.
   function renameFormalVariableGetters(root) {
+    console.log("root:", root);
     if (root.type == 'variableGetter' && root.deltaphone.hasOwnProperty('formalBlockId') && root.deltaphone.formalBlockId == formalBlock.id) {
       root.getField('identifier').setText(newIdentifier);
       root.deltaphone.identifier = newIdentifier;
@@ -4417,8 +4434,8 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   Blockly.Events.disable();
   for (let root of workspace.getTopBlocks()) {
     renameActuals(root);
+    renameFormalVariableGetters(root);
   }
-  renameFormalVariableGetters(toBlock);
   Blockly.Events.enable();
 }
 
