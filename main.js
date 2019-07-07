@@ -1056,9 +1056,7 @@ class ExpressionInvert {
 
   async evaluate(env) {
     let ids = (await this.chord.evaluate(env)).toArray();
-    console.log("ids:", ids);
     let deltaValue = (await this.delta.evaluate(env)).toInteger();
-    console.log("deltaValue:", deltaValue);
 
     if (deltaValue > 0) {
       for (let i = 0; i < deltaValue; ++i) {
@@ -1075,8 +1073,6 @@ class ExpressionInvert {
         ids.splice(0, 0, lopped);
       }
     }
-
-    console.log("ids:", ids);
 
     if (ids.length > 0) {
       env.halfstep = ids[0].toInteger();
@@ -2512,12 +2508,14 @@ let blockDefinitions = {
       output: null,
       inputsInline: true,
       message0: '%1 %2',
+      mutator: 'setMutator',
       args0: [
         { type: 'field_input', name: 'identifier', text: '' },
         { type: 'field_label', name: 'modeArrow', text: '\u2190' },
       ]
     },
     deltaphone: {
+      identifier: null,
       mode: 'value',
     },
   },
@@ -2625,24 +2623,6 @@ let blockDefinitions = {
       return new StatementCall(functionIdentifier, actualParameters);
     }
   },
-  get: {
-    configuration: {
-      colour: expressionColor,
-      output: null,
-      message0: '',
-      args0: [],
-      inputsInline: false,
-      mutator: 'getMutator',
-    },
-    deltaphone: {
-      identifier: null,
-      setBlockId: null,
-    },
-    tree: function() {
-      let identifier = this.deltaphone.identifier;
-      return new StatementGet(identifier);
-    }
-  },
   forRange: {
     configuration: {
       colour: statementColor,
@@ -2735,6 +2715,7 @@ let blockDefinitions = {
       inputsInline: true,
     },
     deltaphone: {
+      identifier: null,
     },
     initializeState: function() {
       this.deltaphone.parameters = [];
@@ -3206,25 +3187,24 @@ function shapeCall(callBlock, sourceBlockId, identifier, parameters) {
 }
 
 function removeInputByIndex(i) {
-	let input = this.inputList[i];
-	if (input.connection && input.connection.isConnected()) {
-		input.connection.setShadowDom(null);
-		var block = input.connection.targetBlock();
-		if (block.isShadow()) {
-			// Destroy any attached shadow block.
-			block.dispose();
-		} else {
-			// Disconnect any attached normal block.
-			block.unplug();
-		}
-	}
-	input.dispose();
-	this.inputList.splice(i, 1);
+  let input = this.inputList[i];
+  if (input.connection && input.connection.isConnected()) {
+    input.connection.setShadowDom(null);
+    var block = input.connection.targetBlock();
+    if (block.isShadow()) {
+      // Destroy any attached shadow block.
+      block.dispose();
+    } else {
+      // Disconnect any attached normal block.
+      block.unplug();
+    }
+  }
+  input.dispose();
+  this.inputList.splice(i, 1);
 };
 
 function removeFormalParameter(formalBlock) {
   Blockly.Events.setGroup(true);
-  console.log("starting new group on formal remove");
 
   let identifier = formalBlock.getField('identifier').getText();
   let toBlock = formalBlock.getParent();
@@ -3242,6 +3222,10 @@ function removeFormalParameter(formalBlock) {
   }
 
   function removeReferencesAndActuals(root) {
+    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+      root.removeInput(`actual${formalIndex}`);
+    }
+
     // Remove reference.
     if (root.type == 'variableGetter') {
       if (root.deltaphone.formalBlockId == formalBlock.id) {
@@ -3295,9 +3279,13 @@ function shapeTo(toBlock) {
 // Reshape calls.
 function shapeCalls2(toBlock, parameter) {
   let parameters = toBlock.deltaphone.parameters;
-  let identifier = toBlock.getField('identifier').getText();
+  let identifier = toBlock.deltaphone.identifier;
 
   function handleCall(callBlock) {
+    callBlock.deltaphone.identifier = identifier;
+    callBlock.deltaphone.sourceBlockId = toBlock.id;
+    syncMode(callBlock);
+
     let oldActuals = [];
     for (let input of callBlock.inputList) {
       if (input.connection) {
@@ -3364,13 +3352,12 @@ function shapeCalls2(toBlock, parameter) {
 }
 
 function shapeFunctionBlocks(toBlock) {
-  shapeCalls2(toBlock);
   shapeTo(toBlock);
+  shapeCalls2(toBlock);
 }
 
 function addFormalParameter(toBlock, mode) {
   Blockly.Events.setGroup(true);
-  console.log("start add group");
 
   let parameter = {
     identifier: 'newparam',
@@ -3396,17 +3383,16 @@ function addFormalParameter(toBlock, mode) {
   formalBlock.getField('identifier').showEditor_();
 
   Blockly.Events.setGroup(false);
-  console.log("stop add group");
 }
 
 function rebuildCall(toBlock, callBlock) {
   let oldActuals = [];
   for (let input of callBlock.inputList) {
-		if (input.connection) {
-			oldActuals.push(input.connection.targetBlock());
-		} else {
-			oldActuals.push(null);
-		}
+    if (input.connection) {
+      oldActuals.push(input.connection.targetBlock());
+    } else {
+      oldActuals.push(null);
+    }
   }
 
   // Clear out all inputs.
@@ -3772,6 +3758,9 @@ function setup() {
 
   Blockly.Extensions.registerMutator('toMutator', {
     mutationToDom: function() {
+      let identifierNode = document.createElement('identifier');
+      identifierNode.setAttribute('value', this.deltaphone.identifier);
+
       let parametersNode = document.createElement('parameters');
 
       for (let parameter of this.deltaphone.parameters) {
@@ -3785,7 +3774,9 @@ function setup() {
       }
 
       let container = document.createElement('mutation');
+      container.appendChild(identifierNode);
       container.appendChild(parametersNode);
+
       return container;
     },
     // From XML to blocks.
@@ -3801,10 +3792,34 @@ function setup() {
             let formalBlockId = parameterNode.hasAttribute('formalblockid') ? parameterNode.getAttribute('formalblockid') : null;
             this.deltaphone.parameters.push({ identifier: identifier, mode: mode, formalBlockId: formalBlockId });
           }
+        } else if (child.nodeName.toLowerCase() == 'identifier') {
+          this.deltaphone.identifier = child.getAttribute('value');
         }
       }
 
       shapeFunctionBlocks(this);
+    },
+  });
+
+  Blockly.Extensions.registerMutator('setMutator', {
+    mutationToDom: function() {
+      let identifierNode = document.createElement('identifier');
+      identifierNode.setAttribute('value', this.deltaphone.identifier);
+
+      let container = document.createElement('mutation');
+      container.appendChild(identifierNode);
+
+      return container;
+    },
+    // From XML to blocks.
+    domToMutation: function(xml) {
+      for (let child of xml.children) {
+        if (child.nodeName.toLowerCase() == 'identifier') {
+          this.deltaphone.identifier = child.getAttribute('value');
+        }
+      }
+
+      shapeGetters(this);
     },
   });
 
@@ -3831,37 +3846,6 @@ function setup() {
     domToMutation: function(xml) {
       this.deltaphone.hasBy = xml.getAttribute('hasby') == 'true';
       shapeForRange(this);
-    }
-  });
-
-  Blockly.Extensions.registerMutator('getMutator', {
-    mutationToDom: function() {
-      let setBlock = workspace.getBlockById(this.deltaphone.setBlockId);
-      if (!setBlock) {
-        return;
-      }
-
-      let container = document.createElement('mutation');
-
-      let setElement = document.createElement('set');
-      setElement.setAttribute('id', setBlock.id);
-      setElement.setAttribute('identifier', setBlock.getField('identifier').getText());
-      container.appendChild(setElement);
-
-      return container;
-    },
-    domToMutation: function(xml) {
-      let setBlockId = null;
-      let setIdentifier = null;
-
-      for (let child of xml.children) {
-        if (child.nodeName.toLowerCase() == 'set') {
-          setBlockId = child.getAttribute('id');
-          setIdentifier = child.getAttribute('identifier');
-        }
-      }
-
-      shapeGet(this, setBlockId, setIdentifier);
     }
   });
 
@@ -4152,7 +4136,7 @@ function setup() {
       return;
     }
 
-    console.log("event:", event);
+    // console.log("event:", event);
 
     // Variable, formal parameter, and function blocks all have text fields in
     // which the the programmer can enter identifiers. We need to propagate the
@@ -4169,7 +4153,6 @@ function setup() {
         let isUngrouped = !event.group;
         if (isUngrouped) {
           Blockly.Events.setGroup(true);
-          console.log("start field edit group");
           event.group = Blockly.Events.getGroup();
         }
 
@@ -4183,7 +4166,6 @@ function setup() {
 
         if (isUngrouped) {
           Blockly.Events.setGroup(false);
-          console.log("stop field edit group");
         }
       }
     }
@@ -4221,7 +4203,6 @@ function setup() {
 
 function generateFormalReference(identifierBlock, formalBlockId) {
   Blockly.Events.setGroup(true);
-  console.log("start formal ref group");
 
   Blockly.selected.unselect(); // WHY?
 
@@ -4262,7 +4243,6 @@ function generateFormalReference(identifierBlock, formalBlockId) {
   // then undo essentially does nothing. We go from deleted block
   // to uncreated block.
   Blockly.Events.setGroup(false);
-  console.log("stop formal ref group");
 }
 
 function registerResizeListener(bounds, gap, resize) {
@@ -4361,37 +4341,49 @@ function reattachReferences(root, identifier, sourceBlock) {
 }
 
 function renameTo(toBlock, oldIdentifier, newIdentifier) {
-  function renameToCalls(root, toBlock) {
-    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-      rebuildCall(toBlock, root);
-    }
-
-    for (let child of root.getChildren()) {
-      renameToCalls(child, toBlock);
-    }
-  }
-
-  Blockly.Events.disable();
-  for (let root of workspace.getTopBlocks()) {
-    renameToCalls(root, toBlock);
-  }
-  Blockly.Events.enable();
+  mutateUndoably(toBlock, () => {
+    toBlock.deltaphone.identifier = newIdentifier;
+  }, () => {
+    shapeFunctionBlocks(toBlock);
+  });
 }
 
-function renameVariable(sourceBlock, oldIdentifier, newIdentifier) {
+function renameVariable(setBlock, oldIdentifier, newIdentifier) {
+  mutateUndoably(setBlock, () => {
+    setBlock.deltaphone.identifier = newIdentifier;
+  }, () => {
+    shapeGetters(setBlock, oldIdentifier, newIdentifier);
+  });
+}
+
+function shapeGetters(setBlock, oldIdentifier, newIdentifier) {
   // There are two scopes: in-function and out-function. Each function has its
   // own scope, and functions are neatly organized. Non-function code is more
   // scattered. Variables only get renamed within their function's scope or in
   // the common out-function scope.
 
+  function renameVariableGetters(root) {
+    if (root.type == 'variableGetter' && root.getField('identifier').getText() == oldIdentifier) {
+      root.getField('identifier').setText(newIdentifier);
+      root.deltaphone.identifier = newIdentifier;
+    } else if (root.type == 'setIdentifier' && root.getField('identifier').getText() == oldIdentifier) {
+      root.deltaphone.identifier = newIdentifier;
+      root.getField('identifier').setText(newIdentifier);
+    }
+
+    for (let child of root.getChildren()) {
+      renameVariableGetters(child, oldIdentifier, newIdentifier);
+    }
+  }
+
   Blockly.Events.disable();
-  let topBlock = sourceBlock.getRootBlock();
+  let topBlock = setBlock.getRootBlock();
   if (topBlock.type == 'to') {
-    renameVariableGetters(topBlock, oldIdentifier, newIdentifier);
+    renameVariableGetters(topBlock);
   } else {
     for (let root of workspace.getTopBlocks()) {
       if (root.type != 'to') {
-        renameVariableGetters(root, oldIdentifier, newIdentifier);
+        renameVariableGetters(root);
       }
     }
   }
@@ -4402,25 +4394,16 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   // Which input is it?
   let toBlock = formalBlock.getParent();
 
-  console.log("rename formal!!!!!");
   mutateUndoably(toBlock, () => {
     let formalIndex = toBlock.inputList.findIndex(input => input.connection && input.connection.targetBlock() == formalBlock) - 1;
     toBlock.deltaphone.parameters[formalIndex].identifier = newIdentifier;
+  }, () => {
+    shapeFunctionBlocks(toBlock);
   });
 
-  function renameActuals(root) {
-    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-      rebuildCall(toBlock, root);
-    }
-
-    for (let child of root.getChildren()) {
-      renameActuals(child);
-    }
-  }
-
+  // TODO: should this be part of shapeFunctionBlocks?
   // Rename all variableGetter children.
   function renameFormalVariableGetters(root) {
-    console.log("root:", root);
     if (root.type == 'variableGetter' && root.deltaphone.hasOwnProperty('formalBlockId') && root.deltaphone.formalBlockId == formalBlock.id) {
       root.getField('identifier').setText(newIdentifier);
       root.deltaphone.identifier = newIdentifier;
@@ -4433,23 +4416,9 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
 
   Blockly.Events.disable();
   for (let root of workspace.getTopBlocks()) {
-    renameActuals(root);
     renameFormalVariableGetters(root);
   }
   Blockly.Events.enable();
-}
-
-function renameVariableGetters(root, oldIdentifier, newIdentifier) {
-  if (root.type == 'variableGetter' && root.getField('identifier').getText() == oldIdentifier) {
-    root.getField('identifier').setText(newIdentifier);
-    root.deltaphone.identifier = newIdentifier;
-  } else if (root.type == 'setIdentifier' && root.getField('identifier').getText() == oldIdentifier) {
-    root.getField('identifier').setText(newIdentifier);
-  }
-
-  for (let child of root.getChildren()) {
-    renameVariableGetters(child, oldIdentifier, newIdentifier);
-  }
 }
 
 function saveLocal() {
