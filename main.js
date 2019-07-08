@@ -3120,10 +3120,14 @@ function triggerArity(block, arity) {
 }
 
 function deleteTo(toBlock) {
-  for (let root of workspace.getTopBlocks()) {
-    removeCalls(root, toBlock.id);
-  }
+  deleteToAssociates(toBlock.id);
   toBlock.dispose();
+}
+
+function deleteToAssociates(toBlockId) {
+  for (let root of workspace.getTopBlocks()) {
+    removeCalls(root, toBlockId);
+  }
 }
 
 function removeCalls(root, sourceBlockId) {
@@ -3729,7 +3733,9 @@ function setup() {
           enabled: true,
           text: 'Delete action and calls',
           callback: function() {
+            Blockly.Events.setGroup(true);
             deleteTo(block);
+            Blockly.Events.setGroup(false);
           }
         };
         options.push(option);
@@ -4136,7 +4142,7 @@ function setup() {
       return;
     }
 
-    // console.log("event:", event);
+    console.log("event:", event);
 
     // Variable, formal parameter, and function blocks all have text fields in
     // which the the programmer can enter identifiers. We need to propagate the
@@ -4168,10 +4174,24 @@ function setup() {
           Blockly.Events.setGroup(false);
         }
       }
-    }
-
-    if (event.type == Blockly.Events.BLOCK_CREATE) {
+    } else if (event.type == Blockly.Events.BLOCK_CREATE) {
       rescopeSetters(workspace.getBlockById(event.blockId));
+    } else if (event.type == Blockly.Events.BLOCK_DELETE) {
+      if (event.oldXml.getAttribute('type') == 'to' && !event.group.endsWith('-delete-to-plus-calls')) {
+        // If we delete a to, we also want to delete all of its calls. But the
+        // calls need to get deleted first, because a call's to must always
+        // exist. So, we undo the delete of the to and then redelete it in the
+        // proper order. We tag the event group with a special suffix to avoid
+        // infinite event recursion on the real delete.
+
+        let id = event.oldXml.getAttribute('id');
+        workspace.undo();
+
+        Blockly.Events.setGroup(`${Blockly.utils.genUid()}-delete-to-plus-calls`);
+        let toBlock = workspace.getBlockById(id);
+        deleteTo(toBlock);
+        Blockly.Events.setGroup(false);
+      }
     }
     
     if (hasManualInterpretation &&
@@ -4587,60 +4607,3 @@ function exportMusicXML() {
 }
 
 window.addEventListener('load', setup);
-
-  // Remove any existing inputs, but save the block in case it
-  // will need to get reconnected.
-  // let oldFormalBlocks = [];
-  // for (let i = 1; i < toBlock.inputList.length - 1; ++i) {
-    // oldFormalBlocks.push(toBlock.inputList[i].connection.targetBlock());
-  // }
-
-  // Remove old parameter inputs.
-  // for (let i = toBlock.inputList.length - 2; i >= 1; --i) {
-    // removeInputByIndex.call(toBlock, i);
-  // }
-
-  // Add new parameter inputs.
-  // for (let [i, parameter] of toBlock.deltaphone.parameters.entries()) {
-    // let input = toBlock.appendValueInput(`formal${i}`);
-    // toBlock.moveNumberedInputBefore(toBlock.inputList.length - 1, toBlock.inputList.length - 2);
-
-    // let formalBlock;
-    // let oldFormalBlockIndex = oldFormalBlocks.findIndex(block => block.id == parameter.formalBlockId);
-
-    // if (oldFormalBlockIndex >= 0) {
-      // formalBlock = oldFormalBlocks[oldFormalBlockIndex];
-      // oldFormalBlocks.splice(oldFormalBlockIndex, 1);
-    // } else {
-      // if (parameter.formalBlockId) {
-        // formalBlock = workspace.newBlock('formalParameter', parameter.formalBlockId);
-        // formalBlock.id = parameter.formalBlockId;
-      // } else {
-        // formalBlock = workspace.newBlock('formalParameter');
-        // parameter.formalBlockId = formalBlock.id;
-      // }
-    // }
-
-    // formalBlock.getField('identifier').setText(parameter.identifier);
-    // formalBlock.deltaphone.mode = parameter.mode;
-    // syncModeArrow(formalBlock);
-    // formalBlock.initSvg();
-    // formalBlock.render();
-    // toBlock.inputList[1 + i].connection.connect(formalBlock.outputConnection);
-  // }
-
-  // Add input to all calls.
-  // for (let root of workspace.getTopBlocks()) {
-    // rebuildCalls(root, toBlock);
-  // }
-  
-  // Traverse previous blocks, disposing of unused ones and reconnecting
-  // persistent ones.
-  // for (let oldFormalBlock of oldFormalBlocks) {
-    // oldFormalBlock.dispose();
-  // }
-//
-  // let startPosition = toBlock.getRelativeToSurfaceXY();
-  // let stopPosition = toBlock.getRelativeToSurfaceXY();
-  // toBlock.moveBy(startPosition.x - stopPosition.x, startPosition.y - stopPosition.y);
-
