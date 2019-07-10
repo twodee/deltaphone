@@ -3120,14 +3120,57 @@ function triggerArity(block, arity) {
 }
 
 function deleteTo(toBlock) {
-  deleteToAssociates(toBlock.id);
-  toBlock.dispose();
-}
-
-function deleteToAssociates(toBlockId) {
   for (let root of workspace.getTopBlocks()) {
     removeCalls(root, toBlockId);
   }
+  toBlock.dispose();
+}
+
+function deleteSet(setBlock) {
+  // There are two scopes: in-function and out-function. Each function has its
+  // own scope, and functions are neatly organized. Non-function code is more
+  // scattered. Variables only get renamed within their function's scope or in
+  // the common out-function scope.
+
+  let identifier = setBlock.getInputTargetBlock('identifier').getFieldValue('identifier');
+
+  function hasAnotherSetter(root) {
+    if (root.type == 'variableGetter' && root.deltaphone.identifier == identifier) {
+      return true;
+    } else {
+      return root.getChildren().some(child => hasAnotherSetter(child)) || (root.getNextBlock() && hasAnotherSetter(root.getNextBlock()));
+    }
+  }
+
+  function deleteGetters(root) {
+    if (root.type == 'variableGetter' && root.deltaphone.identifier == identifier) {
+      root.dispose();
+    } else {
+      for (let child of root.getChildren()) {
+        deleteGetters(child);
+      }
+      if (root.getNextBlock()) {
+        deleteGetters(root.getNextBlock());
+      }
+    }
+  }
+
+  let topBlock = setBlock.getRootBlock();
+  if (topBlock.type == 'to') {
+    if (!hasAnotherSetter(topBlock)) {
+      deleteGetters(topBlock);
+    }
+  } else {
+    if (!workspace.getTopBlocks().filter(root => root.type != 'to').some(root => hasAnotherSetter(root))) {
+      for (let root of workspace.getTopBlocks()) {
+        if (root.type != 'to') {
+          deleteGetters(root);
+        }
+      }
+    }
+  }
+
+  setBlock.dispose(true);
 }
 
 function removeCalls(root, sourceBlockId) {
@@ -3680,7 +3723,9 @@ function setup() {
           enabled: true,
           text: 'Delete variable and getters',
           callback: function() {
+            Blockly.Events.setGroup(`${Blockly.utils.genUid()}-delete-set-plus-getters`);
             deleteSet(block);
+            Blockly.Events.setGroup(false);
           }
         };
         options.push(option);
@@ -3725,17 +3770,6 @@ function setup() {
           text: 'Spawn action call',
           callback: function() {
             spawnCall(block, 'action');
-          }
-        };
-        options.push(option);
-
-        option = {
-          enabled: true,
-          text: 'Delete action and calls',
-          callback: function() {
-            Blockly.Events.setGroup(true);
-            deleteTo(block);
-            Blockly.Events.setGroup(false);
           }
         };
         options.push(option);
@@ -4177,19 +4211,38 @@ function setup() {
     } else if (event.type == Blockly.Events.BLOCK_CREATE) {
       rescopeSetters(workspace.getBlockById(event.blockId));
     } else if (event.type == Blockly.Events.BLOCK_DELETE) {
-      if (event.oldXml.getAttribute('type') == 'to' && !event.group.endsWith('-delete-to-plus-calls')) {
-        // If we delete a to, we also want to delete all of its calls. But the
-        // calls need to get deleted first, because a call's to must always
-        // exist. So, we undo the delete of the to and then redelete it in the
-        // proper order. We tag the event group with a special suffix to avoid
-        // infinite event recursion on the real delete.
+      let type = event.oldXml.getAttribute('type');
+      let id = event.oldXml.getAttribute('id');
 
-        let id = event.oldXml.getAttribute('id');
+      // If we delete a to, we also want to delete all of its calls. But the
+      // calls need to get deleted first, because a call's to must always
+      // exist. So, we undo the delete of the to and then redelete it in the
+      // proper order. We tag the event group with a special suffix to avoid
+      // infinite event recursion on the real delete.
+      if (type == 'to' && !event.group.endsWith('-delete-to-plus-calls')) {
         workspace.undo();
 
         Blockly.Events.setGroup(`${Blockly.utils.genUid()}-delete-to-plus-calls`);
         let toBlock = workspace.getBlockById(id);
         deleteTo(toBlock);
+        Blockly.Events.setGroup(false);
+      }
+
+      // If we delete a set...
+      else if (type == 'set' && !event.group.endsWith('-delete-set-plus-getters')) {
+        workspace.undo();
+        console.log("new set group");
+
+        Blockly.Events.setGroup(`${Blockly.utils.genUid()}-delete-set-plus-getters`);
+        let setBlock = workspace.getBlockById(id);
+
+        // dispose of child
+        let child = setBlock.getNextBlock();
+        if (child) {
+          child.dispose();
+        }
+
+        deleteSet(setBlock);
         Blockly.Events.setGroup(false);
       }
     }
