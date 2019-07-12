@@ -1,4 +1,5 @@
 let workspace = null;
+let isDebugging = true;
 
 let expressionColor = 270;
 let statementColor = 180;
@@ -3078,6 +3079,22 @@ function initializeBlock(id) {
         if (definition.hasOwnProperty('initializeState')) {
           definition.initializeState.apply(this);
         }
+      }
+
+      if (isDebugging) {
+        let oldCustomContextMenu = this.customContextMenu;
+
+        this.customContextMenu = options => {
+          if (oldCustomContextMenu) {
+            oldCustomContextMenu(options);
+          }
+
+          options.unshift({
+            text: this.id,
+            enabled: false,
+            callback: null
+          });
+        };
       }
     },
     tree: definition.tree
