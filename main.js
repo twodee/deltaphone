@@ -2525,8 +2525,8 @@ let blockDefinitions = {
       colour: parameterColor,
       output: null,
       inputsInline: true,
-      extensions: ['extendFormal'],
-      mutator: 'formalMutator',
+      // extensions: ['extendFormal'],
+      // mutator: 'formalMutator',
       message0: '%1 %2',
       args0: [
         { type: 'field_input', name: 'identifier', text: '' },
@@ -3098,7 +3098,7 @@ function mutateUndoably(block, mutate, reshape) {
   // Get XML of outgoing block state.
   let newMutation = block.mutationToDom();
 
-  console.trace("oldMutation:", oldMutation);
+  console.log("oldMutation:", oldMutation);
   console.log("newMutation:", newMutation);
 
   // Apply XML. TODO: Why do I need this? Isn't the mutation already applied?
@@ -3121,7 +3121,7 @@ function triggerArity(block, arity) {
 
 function deleteTo(toBlock) {
   for (let root of workspace.getTopBlocks()) {
-    removeCalls(root, toBlockId);
+    removeCalls(root, toBlock.id);
   }
   toBlock.dispose();
 }
@@ -3134,6 +3134,7 @@ function deleteSet(setBlock) {
 
   let identifier = setBlock.getInputTargetBlock('identifier').getFieldValue('identifier');
 
+  // TODO this should be variable getter, and it should also look for otherness
   function hasAnotherSetter(root) {
     if (root.type == 'variableGetter' && root.deltaphone.identifier == identifier) {
       return true;
@@ -3853,13 +3854,13 @@ function setup() {
     },
     // From XML to blocks.
     domToMutation: function(xml) {
+      let oldIdentifier = this.deltaphone.identifier;
       for (let child of xml.children) {
         if (child.nodeName.toLowerCase() == 'identifier') {
           this.deltaphone.identifier = child.getAttribute('value');
         }
       }
-
-      shapeGetters(this);
+      shapeGetters(this, oldIdentifier, this.deltaphone.identifier);
     },
   });
 
@@ -4049,6 +4050,42 @@ function setup() {
       enabled: true,
       text: 'Paste',
       callback: pasteWorkspace,
+    };
+    options.push(option);
+
+    option = {
+      enabled: true,
+      text: 'Undo Test',
+      callback: function() {
+        let formalBlock = workspace.newBlock('formalParameter');
+        formalBlock.initSvg();
+        formalBlock.render();
+      },
+    };
+    options.push(option);
+
+    option = {
+      enabled: true,
+      text: 'Blarg',
+      callback: function() {
+        Blockly.Blocks['formal'] = {
+          init: function() {
+            this.jsonInit({
+              isMovable: false,
+              output: null,
+              inputsInline: true,
+              message0: '%1',
+              args0: [
+                { type: 'field_input', name: 'identifier', text: '' },
+              ]
+            });
+          }
+        };
+
+        let formal = workspace.newBlock('formal');
+        formal.initSvg();
+        formal.render();
+      },
     };
     options.push(option);
 
@@ -4272,6 +4309,24 @@ function setup() {
       }
     }
   }
+
+  // Blockly.Blocks['formal'] = {
+    // init: function() {
+      // this.jsonInit({
+        // isMovable: false,
+        // output: null,
+        // inputsInline: true,
+        // message0: '%1',
+        // args0: [
+          // { type: 'field_input', name: 'identifier', text: '' },
+        // ]
+      // });
+    // }
+  // };
+
+  // let formal = workspace.newBlock('formal');
+  // formal.initSvg();
+  // formal.render();
 }
 
 function generateFormalReference(identifierBlock, formalBlockId) {
