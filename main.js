@@ -2526,8 +2526,8 @@ let blockDefinitions = {
       colour: parameterColor,
       output: null,
       inputsInline: true,
-      // extensions: ['extendFormal'],
-      // mutator: 'formalMutator',
+      extensions: ['extendFormal'],
+      mutator: 'formalMutator',
       message0: '%1 %2',
       args0: [
         { type: 'field_input', name: 'identifier', text: '' },
@@ -3431,8 +3431,6 @@ function addFormalParameter(toBlock, mode) {
 
   mutateUndoably(toBlock, () => {
     toBlock.deltaphone.parameters.push(parameter);
-  }, () => {
-    shapeFunctionBlocks(toBlock);
   });
 
   let formalBlock = workspace.newBlock('formalParameter');
@@ -4249,6 +4247,12 @@ function setup() {
           Blockly.Events.setGroup(true);
           event.group = Blockly.Events.getGroup();
         }
+        
+        // Mutations might change the field, and we want to continue that
+        // mutation's undo group.
+        else if (!Blockly.Events.getGroup()) {
+          Blockly.Events.setGroup(event.group);
+        }
 
         if (block.type == 'formalParameter') {
           renameFormal(block, event.oldValue, event.newValue);
@@ -4285,7 +4289,6 @@ function setup() {
       // If we delete a set...
       else if (type == 'set' && !event.group.endsWith('-delete-set-plus-getters')) {
         workspace.undo();
-        console.log("new set group");
 
         Blockly.Events.setGroup(`${Blockly.utils.genUid()}-delete-set-plus-getters`);
         let setBlock = workspace.getBlockById(id);
@@ -4326,24 +4329,6 @@ function setup() {
       }
     }
   }
-
-  // Blockly.Blocks['formal'] = {
-    // init: function() {
-      // this.jsonInit({
-        // isMovable: false,
-        // output: null,
-        // inputsInline: true,
-        // message0: '%1',
-        // args0: [
-          // { type: 'field_input', name: 'identifier', text: '' },
-        // ]
-      // });
-    // }
-  // };
-
-  // let formal = workspace.newBlock('formal');
-  // formal.initSvg();
-  // formal.render();
 }
 
 function generateFormalReference(identifierBlock, formalBlockId) {
