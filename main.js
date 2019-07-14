@@ -3204,7 +3204,14 @@ function removeCalls(root, toBlockId) {
 // Calls ----------------------------------------------------------------------
 
 function spawnCall(toBlock, mode) {
-  Blockly.Events.setGroup(true);
+  // Blockly has a concurrency bug, I think, with fire and fireNow_ that
+  // reorders events and puts a mutation event in front of a create event. So,
+  // I can't let the newBlock issue a create event. Instead, we suppress all
+  // events until the block is in a good state, and then we issue a single
+  // create event with the mutation bundled in.
+
+  Blockly.Events.disable();
+
   let callBlock = workspace.newBlock('call');
 
   callBlock.deltaphone.mode = mode;
@@ -3214,16 +3221,11 @@ function spawnCall(toBlock, mode) {
 
   let toPosition = toBlock.getRelativeToSurfaceXY();
   callBlock.moveBy(toPosition.x - 10, toPosition.y + 10);
-
-  mutateUndoably(callBlock, () => {
-    callBlock.deltaphone.identifier = toBlock.deltaphone.identifier;
-    callBlock.deltaphone.toBlockId = toBlock.id; // already done for existing blocks
-    syncMode(callBlock);
-  });
-
   shapeCall(toBlock, callBlock);
 
-  Blockly.Events.setGroup(false);
+  Blockly.Events.enable();
+
+  Blockly.Events.fire(new Blockly.Events.BlockCreate(callBlock));
 }
 
 function removeInputByIndex(i) {
@@ -3320,7 +3322,8 @@ function shapeCall(toBlock, callBlock) {
   // When I undo creation of a call, I reach an intermediate state in the undo
   // stack where the call's mutation is empty and therefore has no record of
   // its toBlock. Let's just skip over that state.
-  if (!toBlock) return;
+  // if (!toBlock) return;
+  // I think I eliminated this intermediate state.
 
   let parameters = toBlock.deltaphone.parameters;
   let identifier = toBlock.deltaphone.identifier;
