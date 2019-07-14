@@ -2587,11 +2587,11 @@ let blockDefinitions = {
     },
     deltaphone: {
       identifier: null,
-      sourceBlockId: null,
+      toBlockId: null,
       mode: null,
     },
     tree: function() {
-      let toBlock = workspace.getBlockById(this.deltaphone.sourceBlockId);
+      let toBlock = workspace.getBlockById(this.deltaphone.toBlockId);
       let formalParameters = toBlock.deltaphone.parameters;
       let functionIdentifier = this.deltaphone.identifier;
       let actualParameters = [];
@@ -3191,12 +3191,12 @@ function deleteSet(setBlock) {
   setBlock.dispose(true);
 }
 
-function removeCalls(root, sourceBlockId) {
-  if (root.type == 'call' && root.deltaphone.sourceBlockId == sourceBlockId) {
+function removeCalls(root, toBlockId) {
+  if (root.type == 'call' && root.deltaphone.toBlockId == toBlockId) {
     root.dispose();
   } else {
     for (let child of root.getChildren()) {
-      removeCalls(child, sourceBlockId);
+      removeCalls(child, toBlockId);
     }
   }
 }
@@ -3204,51 +3204,26 @@ function removeCalls(root, sourceBlockId) {
 // Calls ----------------------------------------------------------------------
 
 function spawnCall(toBlock, mode) {
+  Blockly.Events.setGroup(true);
   let callBlock = workspace.newBlock('call');
 
   callBlock.deltaphone.mode = mode;
-  shapeCallFromTo(toBlock, callBlock);
   callBlock.initSvg();
   callBlock.render();
   callBlock.select();
 
   let toPosition = toBlock.getRelativeToSurfaceXY();
   callBlock.moveBy(toPosition.x - 10, toPosition.y + 10);
-}
 
-function shapeCallFromTo(toBlock, callBlock) {
-  let identifier = toBlock.getField('identifier').getText();
-  shapeCall(callBlock, toBlock.id, identifier, toBlock.deltaphone.parameters);
-}
+  mutateUndoably(callBlock, () => {
+    callBlock.deltaphone.identifier = toBlock.deltaphone.identifier;
+    callBlock.deltaphone.toBlockId = toBlock.id; // already done for existing blocks
+    syncMode(callBlock);
+  });
 
-function shapeCall(callBlock, sourceBlockId, identifier, parameters) {
-  callBlock.deltaphone.identifier = identifier;
-  callBlock.deltaphone.sourceBlockId = sourceBlockId;
-  syncMode(callBlock);
+  shapeCall(toBlock, callBlock);
 
-  if (parameters.length == 0) {
-    let input = callBlock.appendDummyInput();
-    input.appendField(identifier);
-  } else {
-    for (let [index, parameter] of parameters.entries()) {
-      let input;
-      if (parameter.mode == 'action') {
-        input = callBlock.appendStatementInput(`actual${index}`);
-      } else {
-        input = callBlock.appendValueInput(`actual${index}`);
-      }
-      
-      // Tack on the function name for first row.
-      if (index == 0) {
-        input.appendField(identifier);
-      }
-
-      // Only name parameters when there are multiple.
-      if (parameters.length > 1) {
-        input.appendField(parameter.identifier).setAlign(Blockly.ALIGN_RIGHT);
-      }
-    }
-  }
+  Blockly.Events.setGroup(false);
 }
 
 function removeInputByIndex(i) {
@@ -3287,7 +3262,7 @@ function removeFormalParameter(formalBlock) {
   }
 
   function removeReferencesAndActuals(root) {
-    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
+    if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
       root.removeInput(`actual${formalIndex}`);
     }
 
@@ -3341,69 +3316,74 @@ function shapeTo(toBlock) {
   toBlock.render();
 }
 
-// Reshape calls.
-function shapeCalls2(toBlock, parameter) {
+function shapeCall(toBlock, callBlock) {
+  // When I undo creation of a call, I reach an intermediate state in the undo
+  // stack where the call's mutation is empty and therefore has no record of
+  // its toBlock. Let's just skip over that state.
+  if (!toBlock) return;
+
   let parameters = toBlock.deltaphone.parameters;
   let identifier = toBlock.deltaphone.identifier;
 
-  function handleCall(callBlock) {
-    callBlock.deltaphone.identifier = identifier;
-    callBlock.deltaphone.sourceBlockId = toBlock.id;
-    syncMode(callBlock);
+  callBlock.deltaphone.identifier = identifier;
+  callBlock.deltaphone.toBlockId = toBlock.id; // already done for existing blocks
+  syncMode(callBlock);
 
-    let oldActuals = [];
-    for (let input of callBlock.inputList) {
-      if (input.connection) {
-        oldActuals.push(input.connection.targetBlock());
-      } else {
-        oldActuals.push(null);
-      }
-    }
-
-    // Clear out all inputs.
-    for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
-      callBlock.removeInput(callBlock.inputList[i].name);
-    }
-
-    if (parameters.length == 0) {
-      let input = callBlock.appendDummyInput();
-      input.appendField(identifier);
+  let oldActuals = [];
+  for (let input of callBlock.inputList) {
+    if (input.connection) {
+      oldActuals.push(input.connection.targetBlock());
     } else {
-      for (let [i, parameter] of parameters.entries()) {
-        let input;
-        if (parameter.mode == 'action') {
-          input = callBlock.appendStatementInput(`actual${i}`);
-        } else {
-          input = callBlock.appendValueInput(`actual${i}`);
-        }
-          
-        // Tack on the function name for first row.
-        if (i == 0) {
-          input.appendField(identifier);
-        }
-
-        // Only name parameters when there are multiple.
-        if (parameters.length > 1) {
-          input.appendField(parameter.identifier).setAlign(Blockly.ALIGN_RIGHT);
-        }
-      }
+      oldActuals.push(null);
     }
+  }
 
-    for (let [i, formalParameter] of toBlock.deltaphone.parameters.entries()) {
-      if (i < oldActuals.length && oldActuals[i]) {
-        let actualBlock = oldActuals[i];
-        if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
-          callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
-        } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
-          callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
-        }
+  // Clear out all inputs.
+  for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
+    callBlock.removeInput(callBlock.inputList[i].name);
+  }
+
+  if (parameters.length == 0) {
+    let input = callBlock.appendDummyInput();
+    input.appendField(identifier);
+  } else {
+    for (let [i, parameter] of parameters.entries()) {
+      let input;
+      if (parameter.mode == 'action') {
+        input = callBlock.appendStatementInput(`actual${i}`);
+      } else {
+        input = callBlock.appendValueInput(`actual${i}`);
+      }
+        
+      // Tack on the function name for first row.
+      if (i == 0) {
+        input.appendField(identifier);
+      }
+
+      // Only name parameters when there are multiple.
+      if (parameters.length > 1) {
+        input.appendField(parameter.identifier).setAlign(Blockly.ALIGN_RIGHT);
       }
     }
   }
 
+  for (let [i, formalParameter] of toBlock.deltaphone.parameters.entries()) {
+    if (i < oldActuals.length && oldActuals[i]) {
+      let actualBlock = oldActuals[i];
+      if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
+        callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
+      } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
+        callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
+      }
+    }
+  }
+}
+
+// Reshape calls.
+function shapeCalls(toBlock) {
   function traverse(root) {
-    if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-      handleCall(root);
+    if (root.type == 'call' && root.deltaphone.toBlockId == toBlock.id) {
+      shapeCall(toBlock, root);
     }
 
     for (let child of root.getChildren()) {
@@ -3418,7 +3398,7 @@ function shapeCalls2(toBlock, parameter) {
 
 function shapeFunctionBlocks(toBlock) {
   shapeTo(toBlock);
-  shapeCalls2(toBlock);
+  shapeCalls(toBlock);
 }
 
 function addFormalParameter(toBlock, mode) {
@@ -3446,45 +3426,6 @@ function addFormalParameter(toBlock, mode) {
   formalBlock.getField('identifier').showEditor_();
 
   Blockly.Events.setGroup(false);
-}
-
-function rebuildCall(toBlock, callBlock) {
-  let oldActuals = [];
-  for (let input of callBlock.inputList) {
-    if (input.connection) {
-      oldActuals.push(input.connection.targetBlock());
-    } else {
-      oldActuals.push(null);
-    }
-  }
-
-  // Clear out all inputs.
-  for (let i = callBlock.inputList.length - 1; i >= 0; --i) {
-    callBlock.removeInput(callBlock.inputList[i].name);
-  }
-
-  shapeCallFromTo(toBlock, callBlock);
-
-  for (let [i, formalParameter] of toBlock.deltaphone.parameters.entries()) {
-    if (i < oldActuals.length && oldActuals[i]) {
-      let actualBlock = oldActuals[i];
-      if (formalParameter.mode == 'value' && actualBlock.outputConnection) {
-        callBlock.inputList[i].connection.connect(actualBlock.outputConnection);
-      } else if (formalParameter.mode == 'action' && actualBlock.previousConnection) {
-        callBlock.inputList[i].connection.connect(actualBlock.previousConnection);
-      }
-    }
-  }
-}
-
-function rebuildCalls(root, toBlock) {
-  if (root.type == 'call' && root.deltaphone.sourceBlockId == toBlock.id) {
-    rebuildCall(toBlock, root);
-  }
-
-  for (let child of root.getChildren()) {
-    rebuildCalls(child, toBlock);
-  }
 }
 
 function syncModeArrow(block) {
@@ -3907,12 +3848,14 @@ function setup() {
 
   Blockly.Extensions.registerMutator('callMutator', {
     mutationToDom: function() {
-      let toBlock = workspace.getBlockById(this.deltaphone.sourceBlockId);
+      let container = document.createElement('mutation');
+
+      let toBlock = workspace.getBlockById(this.deltaphone.toBlockId);
+
       if (!toBlock) {
-        return;
+        return container;
       }
 
-      let container = document.createElement('mutation');
       container.setAttribute('mode', this.deltaphone.mode);
 
       let toElement = document.createElement('to');
@@ -3933,7 +3876,7 @@ function setup() {
       return container;
     },
     domToMutation: function(xml) {
-      let sourceBlockId = null;
+      let toBlockId = null;
       let toIdentifier = null;
       let parameters = [];
 
@@ -3941,7 +3884,7 @@ function setup() {
 
       for (let child of xml.children) {
         if (child.nodeName.toLowerCase() == 'to') {
-          sourceBlockId = child.getAttribute('id');
+          toBlockId = child.getAttribute('id');
           toIdentifier = child.getAttribute('identifier');
         } else if (child.nodeName.toLowerCase() == 'parameters') {
           for (let parameterNode of child.children) {
@@ -3952,7 +3895,7 @@ function setup() {
         }
       }
 
-      shapeCall(this, sourceBlockId, toIdentifier, parameters);
+      shapeCall(workspace.getBlockById(toBlockId), this);
     }
   });
 
