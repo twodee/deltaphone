@@ -3115,8 +3115,8 @@ function mutateUndoably(block, mutate, reshape) {
   // Get XML of outgoing block state.
   let newMutation = block.mutationToDom();
 
-  console.log("oldMutation:", oldMutation);
-  console.log("newMutation:", newMutation);
+  // console.log("oldMutation:", oldMutation);
+  // console.log("newMutation:", newMutation);
 
   // Apply XML. TODO: Why do I need this? Isn't the mutation already applied?
   block.domToMutation(newMutation);
@@ -3716,23 +3716,23 @@ function setup() {
         };
         options.push(option);
 
-        option = {
-          enabled: true,
-          text: 'Spawn value call',
-          callback: function() {
-            spawnCall(block, 'value');
-          }
-        };
-        options.push(option);
+        // option = {
+          // enabled: true,
+          // text: 'Spawn value call',
+          // callback: function() {
+            // spawnCall(block, 'value');
+          // }
+        // };
+        // options.push(option);
 
-        option = {
-          enabled: true,
-          text: 'Spawn action call',
-          callback: function() {
-            spawnCall(block, 'action');
-          }
-        };
-        options.push(option);
+        // option = {
+          // enabled: true,
+          // text: 'Spawn action call',
+          // callback: function() {
+            // spawnCall(block, 'action');
+          // }
+        // };
+        // options.push(option);
       }
     });
   });
@@ -4275,6 +4275,36 @@ function setup() {
       }
     }
   }
+
+  workspace.registerToolboxCategoryCallback('FUNCTIONS', () => {
+    let blocks = [
+      '<xml><block type="to"></block></xml>',
+      '<xml><block type="returnFromTo"></block></xml>',
+    ];
+
+    // for each TO block
+    //   add statement call
+    //   add expression call
+    Blockly.Events.disable();
+
+    for (let toBlock of workspace.getTopBlocks().filter(block => block.type == 'to')) {
+      let callBlock = workspace.newBlock('call');
+
+      callBlock.deltaphone.mode = 'action';
+      shapeCall(toBlock, callBlock);
+      blocks.push(`<xml>${Blockly.Xml.domToText(Blockly.Xml.blockToDom(callBlock, true))}</xml>`);
+
+      callBlock.deltaphone.mode = 'value';
+      shapeCall(toBlock, callBlock);
+      blocks.push(`<xml>${Blockly.Xml.domToText(Blockly.Xml.blockToDom(callBlock, true))}</xml>`);
+
+      callBlock.dispose();
+    }
+
+    Blockly.Events.enable();
+
+    return blocks.map(xml => Blockly.Xml.textToDom(xml).firstChild);
+  });
 }
 
 function generateFormalReference(identifierBlock, formalBlockId) {
