@@ -4095,7 +4095,16 @@ function setup() {
       Blockly.Xml.domToWorkspace(last, workspace);
       Blockly.Events.recordUndo = true;
 
-      workspace.zoomToFit();
+      let scale = localStorage.getItem('scale');
+      let width = localStorage.getItem('width');
+      if (scale && width) {
+        $('#left').width(parseFloat(width));
+        Blockly.svgResize(workspace);
+        workspace.setScale(parseFloat(scale));
+        workspace.scrollCenter();
+      } else {
+        workspace.zoomToFit();
+      }
     }
   }
 
@@ -4531,6 +4540,8 @@ function saveLocal() {
   let xml = Blockly.Xml.workspaceToDom(workspace);
   xml = Blockly.Xml.domToPrettyText(xml);
   localStorage.setItem('last', xml);
+  localStorage.setItem('scale', workspace.scale);
+  localStorage.setItem('width', $('#left').width());
 }
 
 function dumpXML() {
