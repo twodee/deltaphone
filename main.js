@@ -1204,7 +1204,8 @@ class StatementKeySignature {
 
 function setKeySignature(env, letterOffset, accidentalOffset, scale) {
   env.scaleRoot = letterOffset + accidentalOffset;
-  env.halfstep = 12 * (letterOffset >= 9 ? 3 : 4) + env.scaleRoot;
+  env.halfstep = 12 * (letterOffset >= 9 ? 4 : 5) + env.scaleRoot;
+  env.root = env.halfstep;
   env.scale = scale;
   env.rotation = 0;
 
@@ -4594,7 +4595,7 @@ async function interpret() {
       iMeasure: 2,
       beats: 0,
       sequences: [],
-      halfstep: 48,
+      halfstep: 60,
       beatsPerMeasure: 4,
       beatNote: 4,
       bpm: 80,
