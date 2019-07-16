@@ -3319,12 +3319,6 @@ function shapeTo(toBlock) {
 }
 
 function shapeCall(toBlock, callBlock) {
-  // When I undo creation of a call, I reach an intermediate state in the undo
-  // stack where the call's mutation is empty and therefore has no record of
-  // its toBlock. Let's just skip over that state.
-  // if (!toBlock) return;
-  // I think I eliminated this intermediate state.
-
   let parameters = toBlock.deltaphone.parameters;
   let identifier = toBlock.deltaphone.identifier;
 
@@ -4520,8 +4514,11 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
   // Rename all variableGetter children.
   function renameFormalVariableGetters(root) {
     if (root.type == 'variableGetter' && root.deltaphone.hasOwnProperty('formalBlockId') && root.deltaphone.formalBlockId == formalBlock.id) {
-      root.getField('identifier').setText(newIdentifier);
-      root.deltaphone.identifier = newIdentifier;
+      mutateUndoably(root, () => {
+        root.deltaphone.identifier = newIdentifier;
+      }, () => {
+        root.getField('identifier').setText(newIdentifier);
+      });
     }
 
     for (let child of root.getChildren()) {
@@ -4529,11 +4526,9 @@ function renameFormal(formalBlock, oldIdentifier, newIdentifier) {
     }
   }
 
-  Blockly.Events.disable();
   for (let root of workspace.getTopBlocks()) {
     renameFormalVariableGetters(root);
   }
-  Blockly.Events.enable();
 }
 
 function saveLocal() {
