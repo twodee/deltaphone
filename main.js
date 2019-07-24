@@ -2947,16 +2947,16 @@ let blockDefinitions = {
       output: 'Chord',
       message0: 'chord %1 %2 %3',
       args0: [
-        { type: 'input_value', align: 'RIGHT', name: 'element0', check: ['Delta', 'Position'] },
-        { type: 'input_value', align: 'RIGHT', name: 'element1', check: ['Delta', 'Position'] },
-        { type: 'input_value', align: 'RIGHT', name: 'element2', check: ['Delta', 'Position'] },
+        { type: 'input_value', align: 'RIGHT', name: 'element0', check: ['Delta', 'Position', 'Interval'] },
+        { type: 'input_value', align: 'RIGHT', name: 'element1', check: ['Delta', 'Position', 'Interval'] },
+        { type: 'input_value', align: 'RIGHT', name: 'element2', check: ['Delta', 'Position', 'Interval'] },
       ],
       mutator: 'arityMutator',
       extensions: ['extendArity'],
     },
     deltaphone: {
       arity: 3,
-      elementType: ['Delta', 'Position'],
+      elementType: ['Delta', 'Position', 'Interval'],
     },
     tree: function() {
       let deltas = [];
