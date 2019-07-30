@@ -4087,7 +4087,11 @@ function setup() {
 
       // Don't commit reload into undo history.
       Blockly.Events.recordUndo = false;
-      Blockly.Xml.domToWorkspace(last, workspace);
+      try {
+        Blockly.Xml.domToWorkspace(last, workspace);
+      } catch (e) {
+        console.error(e);
+      }
       Blockly.Events.recordUndo = true;
 
       let scale = localStorage.getItem('scale');
