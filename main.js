@@ -3964,7 +3964,7 @@ function setup() {
       // Currently there are fewer than we need. Add missing.
       else if (actualArity < expectedArity) {
         for (let i = actualArity; i < expectedArity; ++i) {
-          let input = this.appendValueInput('element' + i, );
+          let input = this.appendValueInput('element' + i);
           if (i == 0) {
             input.appendField(this.type);
           }
@@ -3977,8 +3977,8 @@ function setup() {
   });
 
   let options = {
-    toolbox: document.getElementById('toolbox'),
-    trashcan: true,
+    toolbox: isCompact ? false : document.getElementById('toolbox'),
+    trashcan: !isCompact,
     comments: false,
     media: 'blockly/media/',
     zoom: {
