@@ -146,6 +146,9 @@ class Song {
   }
 
   toXML(env) {
+    env.beats = 0;
+    env.iMeasure = 2;
+
     let xml = '';
     xml  = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n';
     xml += '<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 3.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">\n';
@@ -194,6 +197,10 @@ class Song {
 
   push(item) {
     this.items.push(item);
+  }
+
+  toString() {
+    return this.items.join(' | ');
   }
 }
 
@@ -503,6 +510,10 @@ class Note {
 
   markMiddleNotes(item) {
     this.isMiddleNote = !this.isFirstNote && !this.isLastNote;
+  }
+
+  toString() {
+    return `Note[${this.id}, ${this.duration}]`;
   }
 }
 
@@ -1310,7 +1321,18 @@ class StatementBlock {
 
   async evaluate(env) {
     for (let statement of this.statements) {
+      if (env.isStepped && statement.block) {
+        statement.block.addSelect();
+      }
+
       await statement.evaluate(env);
+
+      if (env.isStepped && statement.block) {
+        generateScore(env);
+        $('#score').show();
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        statement.block.removeSelect();
+      }
     }
   }
 }
@@ -1326,19 +1348,10 @@ class StatementProgram {
   }
 }
 
-class StatementGet {
-  constructor(identifier) {
-    this.identifier = identifier;
-  }
-
-  async evaluate(env) {
-    return env.variables[this.identifier].value;
-  }
-}
-
 class StatementReturn {
-  constructor(value) {
+  constructor(value, block) {
     this.value = value;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1347,9 +1360,10 @@ class StatementReturn {
 }
 
 class StatementSet {
-  constructor(identifier, rhs) {
+  constructor(identifier, rhs, block) {
     this.identifier = identifier;
     this.rhs = rhs;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1403,9 +1417,10 @@ class StatementVariableGetter {
 }
 
 class StatementCall {
-  constructor(identifier, actualParameters) {
+  constructor(identifier, actualParameters, block) {
     this.identifier = identifier;
     this.actualParameters = actualParameters;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1482,10 +1497,11 @@ class StatementForRange {
 }
 
 class StatementIf {
-  constructor(conditions, thenBodies, elseBody) {
+  constructor(conditions, thenBodies, elseBody, block) {
     this.conditions = conditions;
     this.thenBodies = thenBodies;
     this.elseBody = elseBody;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1516,9 +1532,9 @@ class StatementRepeat {
 }
 
 class StatementSleep {
-  constructor(block, seconds) {
-    this.block = block;
+  constructor(seconds, block) {
     this.seconds = seconds;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1585,11 +1601,11 @@ class StatementHideScore {
 }
 
 class StatementQuiz {
-  constructor(block, message, answer, choices) {
-    this.block = block;
+  constructor(message, answer, choices, block) {
     this.message = message;
     this.answer = answer;
     this.choices = choices;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1624,9 +1640,9 @@ class StatementQuiz {
 }
 
 class StatementWaitForClick {
-  constructor(block, message) {
-    this.block = block;
+  constructor(message, block) {
     this.message = message;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1659,24 +1675,26 @@ class StatementSlur {
 }
 
 class StatementX {
-  constructor(count, block) {
+  constructor(count, body, block) {
     this.count = count;
+    this.body = body;
     this.block = block;
   }
 
   async evaluate(env) {
     let n = (await this.count.evaluate(env)).toInteger();
     for (let i = 0; i < n; ++i) {
-      await this.block.evaluate(env);
+      await this.body.evaluate(env);
     }
   }
 }
 
 class StatementRepeat12 {
-  constructor(common, first, second) {
+  constructor(common, first, second, block) {
     this.common = common;
     this.first = first;
     this.second = second;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1697,8 +1715,9 @@ class StatementRepeat12 {
 }
 
 class StatementJump {
-  constructor(note) {
+  constructor(note, block) {
     this.note = note;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -1784,10 +1803,11 @@ class StatementJumpInterval {
 }
 
 class StatementJumpAbsolute {
-  constructor(letter, accidental, octave) {
+  constructor(letter, accidental, octave, block) {
     this.letter = letter;
     this.accidental = accidental;
     this.octave = octave;
+    this.block = block;
   }
 
   async evaluate(env) {
@@ -2346,7 +2366,7 @@ let blockDefinitions = {
     },
     tree: function() {
       let note = childToTree.call(this, 'note');
-      return new StatementJump(note);
+      return new StatementJump(note, this);
     }
   },
   play: {
@@ -2381,9 +2401,7 @@ let blockDefinitions = {
       ]
     },
     tree: function() {
-      return new StatementJumpAbsolute(childToTree.call(this, 'letter'),
-                                       childToTree.call(this, 'accidental'),
-                                       childToTree.call(this, 'octave'));
+      return new StatementJumpAbsolute(childToTree.call(this, 'letter'), childToTree.call(this, 'accidental'), childToTree.call(this, 'octave'), this);
     }
   },
   jumpRelative: {
@@ -2622,7 +2640,7 @@ let blockDefinitions = {
         }
       }
 
-      return new StatementCall(functionIdentifier, actualParameters);
+      return new StatementCall(functionIdentifier, actualParameters, this);
     }
   },
   forRange: {
@@ -2680,7 +2698,7 @@ let blockDefinitions = {
     tree: function() {
       let identifier = this.getInputTargetBlock('identifier').getFieldValue('identifier');
       let value = childToTree.call(this, 'value');
-      return new StatementSet(identifier, value);
+      return new StatementSet(identifier, value, this);
     }
   },
   returnFromTo: {
@@ -2696,7 +2714,7 @@ let blockDefinitions = {
     },
     tree: function() {
       let value = childToTree.call(this, 'value');
-      return new StatementReturn(value);
+      return new StatementReturn(value, this);
     }
   },
   to: {
@@ -2767,7 +2785,7 @@ let blockDefinitions = {
         elseBody = slurpBlock(this.getInputTargetBlock('else'));
       }
 
-      return new StatementIf(conditions, thenBodies, elseBody);
+      return new StatementIf(conditions, thenBodies, elseBody, this);
     }
   },
   repeat: {
@@ -2811,7 +2829,7 @@ let blockDefinitions = {
       ],
     },
     tree: function() {
-      return new StatementSleep(this, childToTree.call(this, 'seconds'));
+      return new StatementSleep(childToTree.call(this, 'seconds'), this);
     }
   },
   clearScore: {
@@ -2880,7 +2898,7 @@ let blockDefinitions = {
       ],
     },
     tree: function() {
-      return new StatementWaitForClick(this, childToTree.call(this, 'message'));
+      return new StatementWaitForClick(childToTree.call(this, 'message'), this);
     }
   },
   quiz: {
@@ -2899,7 +2917,7 @@ let blockDefinitions = {
       let message = childToTree.call(this, 'message');
       let answer = childToTree.call(this, 'answer');
       let choices = childToTree.call(this, 'choices');
-      return new StatementQuiz(this, message, answer, choices);
+      return new StatementQuiz(message, answer, choices, this);
     }
   },
   raffle: {
@@ -2999,7 +3017,7 @@ let blockDefinitions = {
       let commonBlock = slurpBlock(this.getInputTargetBlock('common'));
       let firstBlock = slurpBlock(this.getInputTargetBlock('first'));
       let secondBlock = slurpBlock(this.getInputTargetBlock('second'));
-      return new StatementRepeat12(commonBlock, firstBlock, secondBlock);
+      return new StatementRepeat12(commonBlock, firstBlock, secondBlock, this);
     }
   },
   root: {
@@ -3061,7 +3079,7 @@ let blockDefinitions = {
     tree: function() {
       let countBlock = childToTree.call(this, 'count');
       let bodyBlock = this.getInputTargetBlock('body');
-      return new StatementX(countBlock, slurpBlock(bodyBlock));
+      return new StatementX(countBlock, slurpBlock(bodyBlock), this);
     }
   },
 };
@@ -4062,7 +4080,19 @@ function setup() {
 
   document.getElementById('runButton').addEventListener('click', () => {
     hasManualInterpretation = true;
-    interpret();
+    interpret(false);
+  });
+
+  document.getElementById('walkButton').addEventListener('click', () => {
+    hasManualInterpretation = true;
+
+    function deselect(root) {
+      root.removeSelect();
+      root.getChildren().forEach(child => deselect(child));
+    }
+
+    workspace.getTopBlocks().forEach(root => deselect(root));
+    interpret(true);
   });
 
   document.getElementById('exportButton').addEventListener('click', () => {
@@ -4550,7 +4580,7 @@ function dumpXML() {
   console.log(xml);
 }
 
-async function interpret() {
+async function interpret(isStepped) {
   $('#score').alphaTab('pause');
   $('#hud-bottom').empty();
 
@@ -4592,6 +4622,7 @@ async function interpret() {
     let program = new StatementProgram(new StatementBlock(statements));
 
     let env = {
+      isStepped: isStepped,
       root: 0,
       scaleRoot: 0,
       rotation: 0,
@@ -4637,7 +4668,9 @@ async function interpret() {
 function generateScore(env) {
   if (env.sequences[0].items.length > 0) {
     $('#score').alphaTab('playbackSpeed', env.bpm / 120);
+    console.log("env.sequences[0]:", env.sequences[0].toString());
     let xml = env.sequences[0].toXML(env);
+    console.log("xml:", xml);
     document.getElementById('scratch').value = xml;
     render();
   } else {
