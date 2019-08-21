@@ -4727,7 +4727,6 @@ function disableExecuteControls() {
   $('#walk-start-button').prop('disabled', true);
   $('#run-button').prop('disabled', true);
   $('#step-button').prop('disabled', true);
-  $('#play-button').prop('disabled', true);
   $('#export-button').prop('disabled', true);
 }
 
@@ -4735,7 +4734,6 @@ function enableExecuteControls() {
   $('#walk-start-button').prop('disabled', false);
   $('#run-button').prop('disabled', false);
   $('#step-button').prop('disabled', false);
-  $('#play-button').prop('disabled', false);
   $('#export-button').prop('disabled', false);
   $('#walk-stop-button').hide();
   $('#step-stop-button').hide();
