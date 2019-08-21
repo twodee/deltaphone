@@ -10,8 +10,8 @@ if (array_key_exists('src', $_REQUEST)) {
 }
 
 if (array_key_exists('compact', $_REQUEST)) {
-  $isCompact = strcmp($_REQUEST['toolbox'], 'true') == 1 ? 'true' : 'false';
-  $script .= "isCompact = '$isCompact';\n";
+  $isCompact = strcmp($_REQUEST['compact'], 'true') == 0 ? 'true' : 'false';
+  $script .= "isCompact = $isCompact;\n";
 }
 
 $html = str_replace('// SRC:PHP', $script, $html);
