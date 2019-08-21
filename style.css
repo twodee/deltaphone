@@ -9,6 +9,18 @@ body {
   overflow: auto;
 }
 
+.stop-container {
+  position: relative;
+  display: inline-block;
+}
+
+.stop-button {
+  position: absolute;
+  top: 100%;
+  width: 100%;
+  transform: translate(0, 3px);
+}
+
 .alphaTabSurface > svg:first-child, /* Top matter */
 /* .alphaTabSurface > svg:last-child, /* Attribution footer */ 
 .alphaTabSurface > svg:nth-child(2) > *:nth-child(1), /* beat note */

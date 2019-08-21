@@ -1,6 +1,7 @@
 let workspace = null;
 let isDebugging = true;
 
+let cancelRunning = null;
 let expressionColor = 270;
 let statementColor = 180;
 let parameterColor = 330;
@@ -9,6 +10,14 @@ let hasManualInterpretation = false;
 let scoreRoot;
 let triggerEvent = null;
 let nRenames = 0;
+let isCancelled;
+let stepButtonListener;
+
+let ExecuteMode = Object.freeze({
+  Run: 'Run',
+  Walk: 'Walk',
+  Step: 'Step',
+});
 
 let letters = [
   ['C', '0'],
@@ -1321,16 +1330,35 @@ class StatementBlock {
 
   async evaluate(env) {
     for (let statement of this.statements) {
-      if (env.isStepped && statement.block) {
+      if ((env.executeMode == ExecuteMode.Walk || env.executeMode == ExecuteMode.Step) && statement.block) {
         statement.block.addSelect();
+      }
+
+      if (env.executeMode == ExecuteMode.Step) {
+        await new Promise((resolve, reject) => {
+          cancelRunning = () => reject(new RejectionException('rejected'));
+          $('#step-button').off('click').on('click', resolve);
+          $('#step-stop-button').off('click').on('click', cancelRunning);
+        });
       }
 
       await statement.evaluate(env);
 
-      if (env.isStepped && statement.block) {
+      if ((env.executeMode == ExecuteMode.Walk || env.executeMode == ExecuteMode.Step) && statement.block) {
         generateScore(env);
         $('#score').show();
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        if (env.executeMode == ExecuteMode.Walk) {
+          await new Promise((resolve, reject) => {
+            cancelRunning = () => reject(new RejectionException('rejected'));
+            setTimeout(() => {
+              if (isCancelled) {
+                cancelRunning();
+              } else {
+                resolve();
+              }
+            }, 1000);
+          });
+        }
         statement.block.removeSelect();
       }
     }
@@ -1848,6 +1876,12 @@ class RuntimeException extends Error {
   }
 }
 
+class RejectionException extends Error {
+  constructor(message) {
+    super(message);
+  }
+}
+
 class Return {
   constructor(value) {
     this.value = value;
@@ -1865,6 +1899,11 @@ function slurpStatements(block) {
 
 function slurpBlock(block) {
   return new StatementBlock(slurpStatements(block));
+}
+
+function deselect(root) {
+  root.removeSelect();
+  root.getChildren().forEach(child => deselect(child));
 }
 
 function breakMeasure(env) {
@@ -4073,29 +4112,34 @@ function setup() {
     options.push(option);
   };
 
-  document.getElementById('playButton').addEventListener('click', () => {
+  document.getElementById('play-button').addEventListener('click', () => {
     // https://github.com/CoderLine/alphaTab/issues/188
     $('#score').alphaTab('playPause');
   });
 
-  document.getElementById('runButton').addEventListener('click', () => {
+  document.getElementById('run-button').addEventListener('click', () => {
     hasManualInterpretation = true;
-    interpret(false);
+    interpret(ExecuteMode.Run);
   });
 
-  document.getElementById('walkButton').addEventListener('click', () => {
-    hasManualInterpretation = true;
+  $('#walk-stop-button').hide();
+  $('#step-stop-button').hide();
 
-    function deselect(root) {
-      root.removeSelect();
-      root.getChildren().forEach(child => deselect(child));
-    }
+  $('#walk-stop-button').click(() => {
+    isCancelled = true;
+    $('#walk-stop-button').hide();
+  });
 
+  $('#walk-start-button').click(() => {
+    $('#walk-stop-button').show();
+    disableExecuteControls();
     workspace.getTopBlocks().forEach(root => deselect(root));
-    interpret(true);
+    interpret(ExecuteMode.Walk);
   });
 
-  document.getElementById('exportButton').addEventListener('click', () => {
+  enableExecuteControls();
+
+  document.getElementById('export-button').addEventListener('click', () => {
     exportMusicXML();
   });
 
@@ -4186,6 +4230,11 @@ function setup() {
   });
 
   workspace.addChangeListener(event => {
+    isCancelled = true;
+    if (cancelRunning) {
+      cancelRunning('event stopped');
+    }
+
     // We handle a selection of a formal parameter by generating an parameter
     // reference that can be used in the body. The event we care about has some
     // compound logic to it. It must be a UI selected element event. The
@@ -4288,14 +4337,16 @@ function setup() {
       }
     }
     
-    if (hasManualInterpretation &&
-        (event.type == Blockly.Events.BLOCK_CHANGE ||
-         event.type == Blockly.Events.BLOCK_DELETE ||
-         event.type == Blockly.Events.BLOCK_CREATE ||
-         event.type == Blockly.Events.BLOCK_MOVE)) {
-      saveLocal();
-      interpret();
-    }
+    // if (hasManualInterpretation &&
+        // (event.type == Blockly.Events.BLOCK_CHANGE ||
+         // event.type == Blockly.Events.BLOCK_DELETE ||
+         // event.type == Blockly.Events.BLOCK_CREATE ||
+         // event.type == Blockly.Events.BLOCK_MOVE)) {
+      // saveLocal();
+      // if (!isWalking) {
+        // interpret();
+      // }
+    // }
   });
 
   let directions = new Map();
@@ -4580,7 +4631,7 @@ function dumpXML() {
   console.log(xml);
 }
 
-async function interpret(isStepped) {
+async function interpret(executeMode) {
   $('#score').alphaTab('pause');
   $('#hud-bottom').empty();
 
@@ -4622,7 +4673,7 @@ async function interpret(isStepped) {
     let program = new StatementProgram(new StatementBlock(statements));
 
     let env = {
-      isStepped: isStepped,
+      executeMode: executeMode,
       root: 0,
       scaleRoot: 0,
       rotation: 0,
@@ -4650,6 +4701,7 @@ async function interpret(isStepped) {
     };
 
     setKeySignature(env, 0, 0, 0);
+    isCancelled = false;
     await program.evaluate(env);
     generateScore(env);
     $('#score').show();
@@ -4659,18 +4711,50 @@ async function interpret(isStepped) {
     if (e.hasOwnProperty('block')) {
       // e.block.select(); // If I do this, it interferes with formal parameter reference selection.
       e.block.setWarningText(wrap(e.message, 15));
+    } else if (e instanceof RejectionException) {
+      console.log("stopped");
     } else {
       throw e;
     }
+  } finally {
+    isCancelled = false;
+    cancelRunning = null;
+    enableExecuteControls();
   }
+}
+
+function disableExecuteControls() {
+  $('#walk-start-button').prop('disabled', true);
+  $('#run-button').prop('disabled', true);
+  $('#step-button').prop('disabled', true);
+  $('#play-button').prop('disabled', true);
+  $('#export-button').prop('disabled', true);
+}
+
+function enableExecuteControls() {
+  $('#walk-start-button').prop('disabled', false);
+  $('#run-button').prop('disabled', false);
+  $('#step-button').prop('disabled', false);
+  $('#play-button').prop('disabled', false);
+  $('#export-button').prop('disabled', false);
+  $('#walk-stop-button').hide();
+  $('#step-stop-button').hide();
+
+  $('#step-button').off('click').on('click', () => {
+    $('#step-stop-button').show();
+    disableExecuteControls();
+    $('#step-button').prop('disabled', false);
+    $('#step-stop-button').prop('disabled', false);
+    workspace.getTopBlocks().forEach(root => deselect(root));
+    interpret(ExecuteMode.Step);
+  });
 }
 
 function generateScore(env) {
   if (env.sequences[0].items.length > 0) {
     $('#score').alphaTab('playbackSpeed', env.bpm / 120);
-    console.log("env.sequences[0]:", env.sequences[0].toString());
     let xml = env.sequences[0].toXML(env);
-    console.log("xml:", xml);
+    // console.log("xml:", xml);
     document.getElementById('scratch').value = xml;
     render();
   } else {
