@@ -3980,6 +3980,7 @@ function setup() {
     toolbox: isCompact ? false : document.getElementById('toolbox'),
     trashcan: !isCompact,
     comments: false,
+    scrollbars: true,
     media: 'blockly/media/',
     zoom: {
       controls: true,
@@ -4096,7 +4097,7 @@ function setup() {
 
       let scale = localStorage.getItem('scale');
       let width = localStorage.getItem('width');
-      if (scale && width) {
+      if (!isCompact && scale && width) {
         $('#left').width(parseFloat(width));
         Blockly.svgResize(workspace);
         workspace.setScale(parseFloat(scale));
