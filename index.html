@@ -28,9 +28,17 @@
         <div id="progress-label">Loading SoundFont...</div>
       </div>
       <div id="controls">
-        <input type="button" value="Run" id="runButton">
-        <input type="button" value="Play" id="playButton">
-        <input type="button" value="Export" id="exportButton">
+        <input type="button" value="Run" id="run-button">
+        <div class="stop-container">
+          <input type="button" value="Walk" id="walk-start-button">
+          <input type="button" value="Stop" id="walk-stop-button" class="stop-button">
+        </div>
+        <div class="stop-container">
+          <input type="button" value="Step" id="step-button">
+          <input type="button" value="Stop" id="step-stop-button" class="stop-button">
+        </div>
+        <input type="button" value="Play" id="play-button">
+        <input type="button" value="Export" id="export-button">
       </div>
     </div>
     <div id="scoreRoot">
