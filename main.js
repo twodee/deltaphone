@@ -214,7 +214,7 @@ class Song {
 }
 
 class Sequence {
-  constructor() {
+  constructor(block) {
     this.items = [];
     this.block = block;
   }
