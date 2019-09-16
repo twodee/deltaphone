@@ -4228,6 +4228,9 @@ function setup() {
   $('#score').on('alphaTab.soundFontLoaded', (event, progress) => {
     progressRoot.css('display', 'none');
     $('#controls').css('display', 'block');
+    if (source0) {
+      interpret(ExecuteMode.Run);
+    }
   });
 
   workspace.addChangeListener(event => {
