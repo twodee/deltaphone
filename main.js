@@ -4153,7 +4153,7 @@ function setup() {
       'width': '300px'
     });
     Blockly.svgResize(workspace);
-    workspace.zoomToFit();
+    workspace.zoomToFitAlmost();
   } else {
     let last = localStorage.getItem('last');
     if (last) {
@@ -4177,7 +4177,7 @@ function setup() {
         workspace.setScale(parseFloat(scale));
         workspace.scrollCenter();
       } else {
-        workspace.zoomToFit();
+        workspace.zoomToFitAlmost();
       }
     }
   }
@@ -4821,5 +4821,29 @@ function exportMusicXML() {
     document.body.removeChild(tag);
   });
 }
+
+Blockly.WorkspaceSvg.prototype.zoomToFitAlmost = function() {
+  var metrics = this.getMetrics();
+  var blocksBox = this.getBlocksBoundingBox();
+  var blocksWidth = blocksBox.width;
+  var blocksHeight = blocksBox.height;
+  if (!blocksWidth) {
+    return;  // Prevents zooming to infinity.
+  }
+  var workspaceWidth = metrics.viewWidth - 30;
+  var workspaceHeight = metrics.viewHeight - 30;
+  if (this.flyout_) {
+    workspaceWidth -= this.flyout_.width_;
+  }
+  if (!this.scrollbar) {
+    // Origin point of 0,0 is fixed, blocks will not scroll to center.
+    blocksWidth += metrics.contentLeft;
+    blocksHeight += metrics.contentTop;
+  }
+  var ratioX = workspaceWidth / blocksWidth;
+  var ratioY = workspaceHeight / blocksHeight;
+  this.setScale(Math.min(ratioX, ratioY));
+  this.scrollCenter();
+};
 
 window.addEventListener('load', setup);
