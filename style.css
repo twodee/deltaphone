@@ -19,6 +19,7 @@ body {
   top: 100%;
   width: 100%;
   transform: translate(0, 3px);
+  left: 0;
 }
 
 .alphaTabSurface > svg:first-child, /* Top matter */
