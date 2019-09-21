@@ -9,6 +9,10 @@ if (array_key_exists('src', $_REQUEST)) {
   $script .= "source0 = '$src';\n";
 }
 
+if (array_key_exists('editorwidth', $_REQUEST)) {
+  $script .= "editorWidth = {$_REQUEST['editorwidth']};\n";
+}
+
 if (array_key_exists('compact', $_REQUEST)) {
   $isCompact = strcmp($_REQUEST['compact'], 'true') == 0 ? 'true' : 'false';
   $script .= "isCompact = $isCompact;\n";

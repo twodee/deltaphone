@@ -4146,11 +4146,10 @@ function setup() {
 
   if (source0) {
     let xml = Blockly.Xml.textToDom(source0);
-    console.log(xml);
     Blockly.Xml.domToWorkspace(xml, workspace);
     $('#left').css({
-      'min-width': '300px',
-      'width': '300px'
+      'min-width': editorWidth + 'px',
+      'width': editorWidth + 'px'
     });
     Blockly.svgResize(workspace);
     workspace.zoomToFitAlmost();
