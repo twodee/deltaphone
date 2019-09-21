@@ -3198,7 +3198,7 @@ function deleteTo(toBlock) {
   for (let root of workspace.getTopBlocks()) {
     removeCalls(root, toBlock.id);
   }
-  toBlock.dispose();
+  toBlock.dispose(true);
 }
 
 function deleteSet(setBlock) {
@@ -3220,7 +3220,7 @@ function deleteSet(setBlock) {
 
   function deleteGetters(root) {
     if (root.type == 'variableGetter' && root.deltaphone.identifier == identifier) {
-      root.dispose();
+      root.dispose(true);
     } else {
       for (let child of root.getChildren()) {
         deleteGetters(child);
@@ -3251,7 +3251,7 @@ function deleteSet(setBlock) {
 
 function removeCalls(root, toBlockId) {
   if (root.type == 'call' && root.deltaphone.toBlockId == toBlockId) {
-    root.dispose();
+    root.dispose(true);
   } else {
     for (let child of root.getChildren()) {
       removeCalls(child, toBlockId);
@@ -3293,13 +3293,13 @@ function removeInputByIndex(i) {
     var block = input.connection.targetBlock();
     if (block.isShadow()) {
       // Destroy any attached shadow block.
-      block.dispose();
+      block.dispose(true);
     } else {
       // Disconnect any attached normal block.
       block.unplug();
     }
   }
-  input.dispose();
+  input.dispose(true);
   this.inputList.splice(i, 1);
 };
 
@@ -3314,7 +3314,7 @@ function removeFormalParameter(formalBlock) {
     throw 'erm....';
   }
 
-  formalBlock.dispose();
+  formalBlock.dispose(true);
 
   // Backfill vacated slot.
   for (let i = formalIndex + 1; i < toBlock.inputList.length - 2; ++i) {
@@ -3329,7 +3329,7 @@ function removeFormalParameter(formalBlock) {
     // Remove reference.
     if (root.type == 'variableGetter') {
       if (root.deltaphone.formalBlockId == formalBlock.id) {
-        root.dispose();
+        root.dispose(true);
       }
     }
 
@@ -4332,7 +4332,7 @@ function setup() {
         // dispose of child
         let child = setBlock.getNextBlock();
         if (child) {
-          child.dispose();
+          child.dispose(true);
         }
 
         deleteSet(setBlock);
@@ -4390,7 +4390,7 @@ function setup() {
       shapeCall(toBlock, callBlock);
       blocks.push(`<xml>${Blockly.Xml.domToText(Blockly.Xml.blockToDom(callBlock, true))}</xml>`);
 
-      callBlock.dispose();
+      callBlock.dispose(true);
     }
 
     Blockly.Events.enable();
