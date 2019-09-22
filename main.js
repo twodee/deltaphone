@@ -4139,9 +4139,8 @@ function setup() {
     interpret(ExecuteMode.Walk);
   });
 
-  $('#autorun-box').change(() => {
+  $('#autorun-box').change(function() {
     isAutorun = $(this).is(':checked');
-    console.log("isAutorun:", isAutorun);
   });
 
   enableExecuteControls();
