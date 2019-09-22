@@ -1,7 +1,7 @@
 let workspace = null;
 let isDebugging = true;
 
-let isAutorun = true;
+let isAutorun = false;
 let cancelRunning = null;
 let expressionColor = 270;
 let statementColor = 180;
