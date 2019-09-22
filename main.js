@@ -1,6 +1,7 @@
 let workspace = null;
 let isDebugging = true;
 
+let isAutorun = true;
 let cancelRunning = null;
 let expressionColor = 270;
 let statementColor = 180;
@@ -4138,6 +4139,11 @@ function setup() {
     interpret(ExecuteMode.Walk);
   });
 
+  $('#autorun-box').change(() => {
+    isAutorun = $(this).is(':checked');
+    console.log("isAutorun:", isAutorun);
+  });
+
   enableExecuteControls();
 
   document.getElementById('export-button').addEventListener('click', () => {
@@ -4340,16 +4346,14 @@ function setup() {
       }
     }
     
-    // if (hasManualInterpretation &&
-        // (event.type == Blockly.Events.BLOCK_CHANGE ||
-         // event.type == Blockly.Events.BLOCK_DELETE ||
-         // event.type == Blockly.Events.BLOCK_CREATE ||
-         // event.type == Blockly.Events.BLOCK_MOVE)) {
-      // saveLocal();
-      // if (!isWalking) {
-        // interpret();
-      // }
-    // }
+    if (isAutorun &&
+        (event.type == Blockly.Events.BLOCK_CHANGE ||
+         event.type == Blockly.Events.BLOCK_DELETE ||
+         event.type == Blockly.Events.BLOCK_CREATE ||
+         event.type == Blockly.Events.BLOCK_MOVE)) {
+      saveLocal();
+      interpret(ExecuteMode.Run);
+    }
   });
 
   let directions = new Map();

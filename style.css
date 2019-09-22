@@ -63,7 +63,6 @@ body {
 
 p {
   margin-top: 0;
-  font-family: sans-serif;
 }
 
 #hud-bottom p:last-of-type {
@@ -114,7 +113,7 @@ p {
   z-index: 100;
 }
 
-.blocklyText, .blocklyHtmlInput, .blocklyTreeLabel {
+.blocklyText, .blocklyHtmlInput, .blocklyTreeLabel, p, div {
   font-family: 'Hind', sans-serif !important;
 }
 
