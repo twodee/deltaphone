@@ -321,6 +321,62 @@ class Slur {
   }
 }
 
+class Tie {
+  constructor() {
+    this.items = [];
+  }
+
+  toXML(env) {
+    let xml = '';
+
+    if (env.beats == env.beatsPerMeasure * (4 / env.beatNote)) {
+      xml += breakMeasure(env);
+      env.beats = 0;
+    }
+
+    this.markFirstNote();
+    this.markLastNote();
+    this.markMiddleNotes();
+
+    env.isTie = true;
+    for (let item of this.items) {
+      xml += item.toXML(env);
+    }
+    env.isTie = false;
+
+    return xml;
+  }
+
+  push(item) {
+    this.items.push(item);
+  }
+
+  markFirstNote(item) {
+    for (let item of this.items) {
+      if (item.markFirstNote()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  markLastNote(item) {
+    for (let i = this.items.length - 1; i >= 0; --i) {
+      let item = this.items[i];
+      if (item.markLastNote()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  markMiddleNotes(item) {
+    for (let item of this.items) {
+      item.markMiddleNotes();
+    }
+  }
+}
+
 class Repeat12 {
   constructor(common, first, second) {
     this.items = [];
@@ -503,6 +559,17 @@ class Note {
       }
     }
 
+    if (env.isTie) {
+      if (this.isFirstNote) {
+        xml += '<tie type="start"/>';
+      } else if (this.isMiddleNote) {
+        xml += '<tie type="stop"/>';
+        xml += '<tie type="start"/>';
+      } else if (this.isLastNote) {
+        xml += '<tie type="stop"/>';
+      }
+    }
+
     xml += '</note>\n';
 
     return xml;
@@ -531,6 +598,7 @@ class Rest {
   constructor(duration, block) {
     this.duration = duration;
     this.block = block;
+    console.log("this.block:", this.block);
   }
 
   toXML(env) {
@@ -1133,13 +1201,14 @@ class StatementPrint {
 }
 
 class StatementRest {
-  constructor(duration) {
+  constructor(duration, block) {
     this.duration = duration;
+    this.block = block;
   }
 
   async evaluate(env) {
     let durationValue = (await this.duration.evaluate(env)).toInteger();
-    env.emit(new Rest(durationValue, this));
+    env.emit(new Rest(durationValue, this.block));
   }
 }
 
@@ -1697,6 +1766,19 @@ class StatementSlur {
 
   async evaluate(env) {
     env.push(new Slur());
+    await this.block.evaluate(env);
+    let sequence = env.pop();
+    env.emit(sequence);
+  }
+}
+
+class StatementTie {
+  constructor(block) {
+    this.block = block;
+  }
+
+  async evaluate(env) {
+    env.push(new Tie());
     await this.block.evaluate(env);
     let sequence = env.pop();
     env.emit(sequence);
@@ -2558,7 +2640,7 @@ let blockDefinitions = {
     },
     tree: function() {
       let duration = childToTree.call(this, 'duration');
-      return new StatementRest(duration);
+      return new StatementRest(duration, this);
     }
   },
   setIdentifier: {
@@ -2856,6 +2938,21 @@ let blockDefinitions = {
     tree: function() {
       let bodyBlock = this.getInputTargetBlock('body');
       return new StatementSlur(slurpBlock(bodyBlock));
+    }
+  },
+  tie: {
+    configuration: {
+      colour: statementColor,
+      previousStatement: null,
+      nextStatement: null,
+      message0: 'tie %1',
+      args0: [
+        { type: 'input_statement', name: 'body' },
+      ]
+    },
+    tree: function() {
+      let bodyBlock = this.getInputTargetBlock('body');
+      return new StatementTie(slurpBlock(bodyBlock));
     }
   },
   sleep: {
@@ -4211,7 +4308,7 @@ function setup() {
   $('#score').alphaTab({
     width: -1,
     staves: 'score',
-    transpositionPitches: [12],
+    // transpositionPitches: [12],
     layout: {
       mode: 'page',
       additionalSettings: {
@@ -4695,6 +4792,7 @@ async function interpret(executeMode) {
       variables: {},
       marks: [],
       isSlur: false,
+      isTie: false,
       push: function(item) {
         this.sequences.push(item);
       },
@@ -4716,6 +4814,8 @@ async function interpret(executeMode) {
     lastWarnedBlock = e.block;
     if (e.hasOwnProperty('block')) {
       // e.block.select(); // If I do this, it interferes with formal parameter reference selection.
+      console.log("e:", e);
+      console.log("e.block:", e.block);
       e.block.setWarningText(wrap(e.message, 15));
     } else if (e instanceof RejectionException) {
       console.log("stopped");
